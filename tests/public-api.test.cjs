@@ -2,7 +2,7 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),vm=requir
 function browser(){
  const storage=new Map(),requests=[];
  const items=Array.from({length:205},(_,i)=>({id:String(i+1),title:'Appartement',location:'1050 Ixelles',price:1001+i,area:80,bedrooms:2,photos:['https://agency.example/room.jpg'],source:'Agency',features:{}}));
- const manifest={revision:'one',files:{rent:'rent-test.json',sale:'sale-test.json'},config:{defaults:{rent:{areas:'Ixelles',features:{}},sale:{areas:'Ixelles',features:{}}},areaAliases:{ixelles:['1050-elsene','Ixelles']}};
+ const manifest={revision:'one',files:{rent:'rent-test.json',sale:'sale-test.json'},config:{defaults:{rent:{areas:'Ixelles',features:{}},sale:{areas:'Ixelles',features:{}}},areaAliases:{ixelles:['1050-elsene','Ixelles']}}};
  const fetch=async input=>{const url=String(input);requests.push(url);assert.ok(url.startsWith('https://guifred.github.io/ninous-appart/data/'));return new Response(JSON.stringify(url.endsWith('manifest.json')?manifest:{items,status:{state:'complete',lastRun:'2026-10-22T10:00:00+02:00'}}))};
  const ctx=vm.createContext({URL,Response,Date,console,location:{href:'https://guifred.github.io/ninous-appart/',origin:'https://guifred.github.io'},document:{currentScript:{src:'https://guifred.github.io/ninous-appart/api.js'}},localStorage:{getItem:k=>storage.get(k)||null,setItem:(k,v)=>storage.set(k,v)},window:{fetch}});
  vm.runInContext(fs.readFileSync('public_site/search.js','utf8'),ctx);vm.runInContext(fs.readFileSync('public_site/api.js','utf8'),ctx);
