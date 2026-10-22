@@ -1,0 +1,95 @@
+name: Collecter et publier
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['public-data/**']
+  workflow_dispatch:
+    inputs:
+      collect:
+        description: Actualiser les annonces avant de publier
+        type: boolean
+        default: true
+  schedule:
+    # UTC: only the rule matching Belgium's current UTC offset is executed.
+    - cron: '0 8,15 * * *'
+    - cron: '0 9,16 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: ninou-publication
+  cancel-in-progress: false
+jobs:
+  clock:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.clock.outputs.enabled }}
+    steps:
+      - id: clock
+        env:
+          EVENT: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+          offset=datetime.now(ZoneInfo('Europe/Brussels')).utcoffset().total_seconds()/3600
+          expected='0 8,15 * * *' if offset==2 else '0 9,16 * * *'
+          enabled=os.environ['EVENT']!='schedule' or os.environ['SCHEDULE']==expected
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:f.write('enabled='+str(enabled).lower()+'\n')
+          PY
+  build:
+    needs: clock
+    if: needs.clock.outputs.enabled == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Vérifier l’export et les filtres
+        run: |
+          python3 -m unittest discover -s tests -p 'test_public_site.py' -v
+          node --test tests/public-search.test.cjs tests/public-api.test.cjs
+      - name: Restaurer les données partagées
+        run: python3 scripts/bootstrap_cloud.py
+      - name: Collecter les locations et les achats
+        id: collection
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.collect)
+        timeout-minutes: 35
+        continue-on-error: true
+        run: python3 -u scheduler.py
+      - name: Générer le site et conserver les dates de première détection
+        run: python3 public_site/build.py --output _site --state-output public-data
+      - name: Enregistrer les données publiques
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public-data
+          if ! git diff --cached --quiet; then
+            git commit -m 'Actualiser les annonces publiques'
+            git push
+          fi
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+          retention-days: 1
+      - name: Signaler une collecte incomplète
+        if: steps.collection.outcome == 'failure'
+        run: echo '::warning::La collecte a échoué ou dépassé son délai. Le site conserve le dernier état enregistré ; consulter les journaux de cette exécution.'
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - uses: actions/deploy-pages@v4
+        id: deployment

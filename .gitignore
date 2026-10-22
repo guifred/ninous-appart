@@ -1,0 +1,13 @@
+.DS_Store
+__pycache__/
+*.pyc
+.env
+.env.*
+.venv/
+data/
+backups/
+*.plist
+_site/
+release/
+.publish-tools/
+*.log
