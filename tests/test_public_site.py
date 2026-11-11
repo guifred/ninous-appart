@@ -6,7 +6,7 @@ from unittest.mock import patch
 from public_site.build import build, sanitize_row, sanitize_status, defaults, write
 from scripts.bootstrap_cloud import bootstrap
 from agency_parsers import parse_catalogue, pagination
-from beach_distance import add_beach_distance, extract_coordinates
+from beach_distance import add_beach_distance, extract_coordinates, extract_detail_address, extract_address_from_text, extract_address_from_url, enrich_coastal_locations
 from brussels_agencies import collect_brussels
 
 class PublicExportTests(unittest.TestCase):
@@ -32,6 +32,12 @@ class PublicExportTests(unittest.TestCase):
         self.assertGreater(mapped['beachDistanceM'],0)
         self.assertEqual(mapped['beachDistanceBasis'],'straight-line-estimate')
 
+    def test_coastal_detail_prefers_property_position_over_other_cards(self):
+        page='''<a class="card" data-id="other" data-lat="51.0601" data-lon="3.1051"></a>
+        <script type="application/ld&#x2B;json">{"@type":"RealEstateListing","mainEntity":{"@type":"Apartment","geo":{"latitude":51.1461,"longitude":2.71352}}}</script>'''
+        self.assertEqual(extract_coordinates(page),(51.1461,2.71352))
+        self.assertEqual(extract_coordinates('<a href="http://maps.google.com/maps?ll=51.1100539,2.7622898">plan</a>'),(51.1100539,2.7622898))
+
     def test_portanic_residence_is_located_without_a_street_address_in_the_ad(self):
         row={'title':'Appartement in Residentie Portanic te Nieuwpoort','summary':'',
              'location':'8620 Nieuwpoort'}
@@ -39,6 +45,18 @@ class PublicExportTests(unittest.TestCase):
         self.assertEqual(row['beachLocationBasis'],'verified-residence')
         self.assertEqual(row['beachDistanceM'],1750)
         self.assertNotIn('beachWalkMinutes',row)
+
+    def test_coastal_address_in_description_locates_other_ads_in_same_residence(self):
+        self.assertEqual(extract_address_from_text('Studio te koop Nieuwpoort Franslaan 100 27m²'),'Franslaan 100')
+        self.assertEqual(extract_address_from_url('https://agency.test/nieuwpoort/onze-lieve-vrouwstraat-43-3/7583003'),'Onze Lieve Vrouwstraat 43')
+        self.assertEqual(extract_detail_address('<a href="http://maps.google.com/?q=Franslaan+100">Franslaan 100, 8620 Nieuwpoort</a>'),'Franslaan 100')
+        rows=[{'title':'Appartement Santhooft','summary':'Henegouwenstraat 17 E02.05 Santhooft, 8620 Nieuwpoort','location':'8620 Nieuwpoort'},
+              {'title':'Res. Santhooft 0502','summary':'Residentie Santhooft C 0502','location':'8620 Nieuwpoort'}]
+        with patch('beach_distance._geocode',return_value=(51.15,2.72)),patch('beach_distance.persist_geocodes'):
+            enrich_coastal_locations(rows)
+        self.assertEqual(rows[0]['streetAddress'],'Henegouwenstraat 17')
+        self.assertEqual(rows[1]['beachLocationBasis'],'matched-residence')
+        self.assertEqual(rows[0]['beachDistanceM'],rows[1]['beachDistanceM'])
 
     def test_coastal_agency_card_keeps_asking_price_and_district(self):
         card="""<a class='pand-wrapper' href='/detail/te-koop-appartement-middelkerke/7699972'>

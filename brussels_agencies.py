@@ -222,7 +222,7 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
                 except Exception as exc:errors.append(str(exc)[:140])
             if site.get('coastal') and rows:
                 from scraper import parse_detail_photos
-                from beach_distance import extract_coordinates, listing_description, add_beach_distance
+                from beach_distance import extract_coordinates, extract_detail_address, listing_description, add_beach_distance
                 pending=[(url,row) for url,row in rows.items() if url not in detail_urls[:max_details]]
                 if len(pending)>max(0,max_details-result['details']):
                     result['partial']=True;errors.append('Galeries de certaines annonces non vérifiées : limite de pages atteinte')
@@ -233,6 +233,8 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
                         if photos:row['photos']=valid_photos(photos)
                         description=listing_description(page)
                         if len(description)>len(row.get('summary') or ''):row['summary']=description
+                        address=extract_detail_address(page)
+                        if address and not row.get('streetAddress'):row['streetAddress']=address
                         coordinates=extract_coordinates(page)
                         if coordinates:
                             row['latitude'],row['longitude']=coordinates

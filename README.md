@@ -1,6 +1,8 @@
 # Ninou’s appart · Bruxelles et côte belge
 
-Recherche d’appartements à louer et à vendre à Bruxelles, et d’appartements à acheter dans dix communes de la côte belge, avec carte, photos, pépites et favoris.
+Recherche d’appartements à louer et à vendre à Bruxelles, et d’appartements ou maisons à acheter dans dix communes de la côte belge, avec carte, photos, pépites et favoris.
+
+Les cartes des annonces côtières indiquent la distance approximative à la plage. Le collecteur utilise en priorité une distance explicitement publiée, sinon les coordonnées de la carte du bien, son adresse vérifiée dans le registre flamand ou une résidence identifiée sans ambiguïté. Une distance calculée depuis des coordonnées est indiquée **à vol d’oiseau** : ce n’est pas un itinéraire piéton, notamment près du port. Si la position d’une nouvelle annonce n’est pas vérifiable, l’interface le signale au lieu d’inventer une distance.
 
 Le site est hébergé gratuitement sur GitHub Pages. Les critères, favoris et estimations personnelles restent dans le navigateur de chaque visiteur. Le bouton **Appliquer les filtres** parcourt les annonces déjà collectées ; il ne lance pas de collecte supplémentaire. Les photos supplémentaires sont celles déjà présentes dans le catalogue, avec accès à l’annonce d’origine.
 

@@ -7,7 +7,7 @@ import time
 
 from model import TZ, atomic_json, valid_photos
 from scraper import DATA, fetch, parse_detail_photos, source_robots_ok
-from beach_distance import extract_coordinates, listing_description, add_beach_distance
+from beach_distance import extract_coordinates, extract_detail_address, listing_description, add_beach_distance, enrich_coastal_locations
 
 CACHE = DATA / 'photo-cache.json'
 
@@ -61,10 +61,13 @@ def enrich_galleries(modes=('coast', 'rent', 'sale'), limit=80):
             if mode=='coast':
                 description=listing_description(page)
                 if len(description)>len(row.get('summary') or ''):row['summary']=description
+                address=extract_detail_address(page)
+                if address and not row.get('streetAddress'):row['streetAddress']=address
                 coordinates=extract_coordinates(page)
                 if coordinates:row['latitude'],row['longitude']=coordinates
                 add_beach_distance(row)
             cache[key]={'checkedAt':now.isoformat(timespec='seconds'),'photoVersion':2,'beachVersion':1 if mode=='coast' else 0,'photos':photos}
+        if mode=='coast':enrich_coastal_locations(rows)
         atomic_json(DATA/mode/'listings.json',rows)
     if inspected: atomic_json(CACHE,cache)
     return {'inspected':inspected,'updated':updated,'errors':errors[:2]}

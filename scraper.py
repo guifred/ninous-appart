@@ -824,6 +824,9 @@ def _collect_unlocked(mode='rent'):
     unique_entries=[];object_ids=set()
     for row in seen.values():
         if id(row) not in object_ids:object_ids.add(id(row));unique_entries.append(row)
+    if mode=='coast':
+        from beach_distance import enrich_coastal_locations
+        enrich_coastal_locations(unique_entries)
     entries=[]
     for row in unique_entries:
         prior=previous.get(row.get('id'),{})
