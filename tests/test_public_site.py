@@ -8,8 +8,45 @@ from scripts.bootstrap_cloud import bootstrap
 from agency_parsers import parse_catalogue, pagination
 from beach_distance import add_beach_distance, extract_coordinates, extract_detail_address, extract_address_from_text, extract_address_from_url, enrich_coastal_locations
 from brussels_agencies import collect_brussels
+from gallery_enrichment import enrich_galleries
 
 class PublicExportTests(unittest.TestCase):
+    def test_future_coastal_agency_ad_gets_distance_on_daily_detail_retry(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);write(data/'coast/status.json',{'state':'source-error'})
+            write(data/'coast/listings.json',[
+                {'id':'future','url':'https://agency.example/flat/123','title':'Appartement te koop',
+                 'summary':'','location':'8620 Nieuwpoort','photos':[]}])
+            page='<div class="property-map" data-long="2.71352" data-lat="51.1461"></div>'
+            with patch('gallery_enrichment.DATA',data),patch('gallery_enrichment.CACHE',data/'photo-cache.json'),\
+                 patch('gallery_enrichment.source_robots_ok',return_value=True),\
+                 patch('gallery_enrichment.fetch',return_value=page),\
+                 patch('gallery_enrichment.time.sleep'),patch('beach_distance.persist_geocodes'):
+                result=enrich_galleries(modes=('coast',),limit=1)
+            row=json.loads((data/'coast/listings.json').read_text())[0]
+            self.assertEqual(result['inspected'],1)
+            self.assertGreater(row['beachDistanceM'],0)
+            self.assertEqual(row['beachDistanceBasis'],'straight-line-estimate')
+
+    def test_failed_coastal_host_does_not_stop_other_agencies(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);write(data/'coast/status.json',{'state':'partial'})
+            write(data/'coast/listings.json',[
+                {'id':'one','url':'https://one.example/flat','title':'Flat','location':'8620 Nieuwpoort','photos':[]},
+                {'id':'two','url':'https://two.example/flat','title':'Flat','location':'8620 Nieuwpoort','photos':[]}])
+            page='<div class="property-map" data-long="2.71352" data-lat="51.1461"></div>'
+            def fetch(url):
+                if 'one.example' in url:raise OSError('temporary failure')
+                return page
+            with patch('gallery_enrichment.DATA',data),patch('gallery_enrichment.CACHE',data/'photo-cache.json'),\
+                 patch('gallery_enrichment.source_robots_ok',return_value=True),\
+                 patch('gallery_enrichment.fetch',side_effect=fetch),\
+                 patch('gallery_enrichment.time.sleep'),patch('beach_distance.persist_geocodes'):
+                result=enrich_galleries(modes=('coast',),limit=2)
+            rows=json.loads((data/'coast/listings.json').read_text())
+            self.assertEqual(result['inspected'],1)
+            self.assertGreater(next(row for row in rows if row['id']=='two')['beachDistanceM'],0)
+
     def test_requested_brussels_sites_are_checked_even_after_failed_audit(self):
         sites=[{'name':'Agency A','website':'https://a.example/','enabled':False,'auditStatus':'unavailable'},
                {'name':'Agency B','website':'https://b.example/','enabled':False,'auditStatus':'unavailable'}]
