@@ -9,8 +9,31 @@ from agency_parsers import parse_catalogue, pagination
 from beach_distance import add_beach_distance, extract_coordinates, extract_detail_address, extract_address_from_text, extract_address_from_url, enrich_coastal_locations
 from brussels_agencies import collect_brussels
 from gallery_enrichment import enrich_galleries
+from energy_detail import extract_detail_energy
 
 class PublicExportTests(unittest.TestCase):
+    def test_future_agency_ad_recovers_energielabel_from_original_page(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);write(data/'sale/status.json',{'state':'partial'})
+            write(data/'sale/listings.json',[
+                {'id':'future-energy','url':'https://agency.example/flat/456','title':'Appartement',
+                 'summary':'','location':'1000 Bruxelles','postalCode':'1000','photos':[]}])
+            page='<main><p>Appartement avec terrasse.</p><div><span>Energielabel</span><span>B</span></div></main>'
+            with patch('gallery_enrichment.DATA',data),patch('gallery_enrichment.CACHE',data/'photo-cache.json'),\
+                 patch('gallery_enrichment.source_robots_ok',return_value=True),\
+                 patch('gallery_enrichment.fetch',return_value=page),patch('gallery_enrichment.time.sleep'):
+                result=enrich_galleries(modes=('sale',),limit=1)
+            row=json.loads((data/'sale/listings.json').read_text())[0]
+            self.assertEqual(result['inspected'],1)
+            self.assertEqual((row['energyRating'],row['energyRegion']),('B','PEB · Bruxelles'))
+
+    def test_original_flemish_energy_labels_are_read_from_detail_pages(self):
+        self.assertEqual(extract_detail_energy('<tr><td>EPC label</td><td><img src="/epc_label/epc_c.png"></td></tr>'),'C')
+        self.assertEqual(extract_detail_energy('<div><div>EPC</div><div class="epc-value"><span class="ei-icon ei-icon-c"></span></div></div>'),'C')
+        self.assertEqual(extract_detail_energy('<div>Energielabel: A</div>'),'A')
+        self.assertEqual(extract_detail_energy('<p>EPC: 286 (Label C).</p>'),'C')
+        self.assertIsNone(extract_detail_energy('<p>EPC: 286 kWh/m².</p>'))
+
     def test_future_coastal_agency_ad_gets_distance_on_daily_detail_retry(self):
         with tempfile.TemporaryDirectory() as tmp:
             data=Path(tmp);write(data/'coast/status.json',{'state':'source-error'})

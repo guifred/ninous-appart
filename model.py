@@ -85,10 +85,12 @@ def extract_energy_rating(value):
     """Read a Belgian EPC/PEB class from listing text or accessible image metadata."""
     text=str(value or '')
     patterns=(
+        r'\b(?:epc|peb)\s*:\s*\d{1,4}(?:[,.]\d+)?\s*\(?\s*label\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:epc|peb)(?:\s*[/&-]\s*(?:epc|peb))?\s*(?:(?:label|class|klasse|classe|rating|score)\s*)?[\s:=\-\[\]()]{0,10}([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:energy|energie)(?:[- _](?:label|class|klasse|rating|score))?\s*[:=\-\[]?\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:classe\s+(?:énergétique|energetique)|energy\s+(?:class|label|rating)|energieklasse|energielabel)\s*[:=\-]?\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:epc|peb|energy[-_ ](?:label|class)|energie[-_ ](?:label|klasse))[-_ /]+([a-g])\.(?:svg|png|jpe?g|webp)(?:\?|\b)',
+        r'\bei-icon-(?:energy-class-)?([a-g])\b',
     )
     for pattern in patterns:
         match=re.search(pattern,text,re.I)
@@ -120,7 +122,7 @@ def normalize_listing(row, mode, today=None, prior=None):
     row['construction']=row.get('construction') or ('new' if any(norm(t) in text for t in ('new build','new construction','neuf','nieuwbouw','nouvelle construction')) else 'existing' if any(norm(t) in text for t in ('existing property','existing building','bâtiment existant','batiment existant','bestaande woning')) else None)
     row['occupancy']=row.get('occupancy') or ('vacant' if any(norm(t) in text for t in ('vacant','libre à l acte','libre a l acte','vrij bij akte')) else 'occupied' if any(norm(t) in text for t in ('occupied','loué','loue','verhuurd','currently rented')) else None)
     energy_text=' '.join(str(row.get(k) or '') for k in ('energyRating','energyText','summary','title','location'))
-    row['energyRating']=extract_energy_rating(energy_text)
+    row['energyRating']=extract_energy_rating(energy_text) or extract_energy_rating(prior.get(row['id'],{}).get('energyRating'))
     brussels_places=('brussels','bruxelles','woluwe','ixelles','schaerbeek','etterbeek','evere','uccle','auderghem','anderlecht','forest','ganshoren','jette','koekelberg','molenbeek','saint gilles','saint josse','sint agatha','watermael','berchem sainte')
     flemish_places=('flanders','vlaanderen','antwerp','antwerpen','gent','ghent','leuven','brugge','bruge','hasselt','mechelen','malines','kortrijk','courtrai','aalst','alost','oostende','ostend','genk','sint niklaas','turnhout','roeselare','waregem','tienen','vilvoorde','dendermonde')
     walloon_places=('wallonia','wallonie','wallon','liège','liege','namur','charleroi','mons','tournai','verviers','arlon','wavre','la louvière','bastogne','marche en famenne','nivelles','dinant','soignies','gembloux')
@@ -131,7 +133,7 @@ def normalize_listing(row, mode, today=None, prior=None):
     if postal_number and 1000<=postal_number<=1299:region='PEB · Bruxelles'
     elif postal_number and (1500<=postal_number<=3999 or 8000<=postal_number<=9999):region='EPC · Flandre'
     elif postal_number and (1300<=postal_number<=1499 or 4000<=postal_number<=7999):region='PEB · Wallonie'
-    row['energyRegion']=row.get('energyRegion') or (region if row['energyRating'] else None)
+    row['energyRegion']=(row.get('energyRegion') or prior.get(row['id'],{}).get('energyRegion') or region) if row['energyRating'] else None
     floor=re.search(r'\b(?:floor|étage|etage|verdieping)\s*[:#]?\s*(\d{1,2})\b',text,re.I)
     row['floor']=number_or_none(row.get('floor')) if row.get('floor') is not None else (int(floor.group(1)) if floor else None)
     pub=parse_publication_date(row.get('publicationDate'))

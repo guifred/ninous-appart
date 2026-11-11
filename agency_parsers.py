@@ -119,8 +119,8 @@ def parse_catalogue(page,page_url,mode,site):
         if beds is None:
             m=re.search(r'(\d+)\s*(?:chambres?|ch\.|slaapkamers?|bedrooms?)',body,re.I);beds=int(m[1]) if m else (0 if 'studio' in body.lower() else None)
         title=next((n.text() for n in nodes if n.tag in ('h2','h3','h4')),None) or next((html.unescape(n.attrs.get('alt','')).split(' - ')[0] for n in images if kind(n.attrs.get('alt',''))),None) or ('Appartement' if ptype=='Apartment' else 'Maison')
-        energy=' '.join(n.attrs.get('alt','')+' '+n.attrs.get('class','') for n in nodes if re.search(r'peb|epc',str(n.attrs),re.I))
-        rows[url]={**brand(site,url),'transaction':mode,'title':title,'propertyType':ptype,'location':((postal_code+' ') if postal_code and postal_code not in city else '')+city,'postalCode':postal_code,'price':price,'area':amount(area_match[1]) if area_match else None,'bedrooms':beds,'bathrooms':baths,'fees':None,'summary':body[:700],'photos':valid_photos(photos),'energyText':energy,'publicationDate':None}
+        energy=' '.join(' '.join(str(v) for v in n.attrs.values()) for n in nodes if re.search(r'peb|epc|energielabel|energieklasse|energy.class',str(n.attrs),re.I))
+        rows[url]={**brand(site,url),'transaction':mode,'title':title,'propertyType':ptype,'location':((postal_code+' ') if postal_code and postal_code not in city else '')+city,'postalCode':postal_code,'price':price,'area':amount(area_match[1]) if area_match else None,'bedrooms':beds,'bathrooms':baths,'fees':None,'summary':body[:700],'photos':valid_photos(photos),'energyText':energy+' '+body[:1800],'publicationDate':None}
     return list(rows.values())
 
 def structured_detail(page,url,mode,site):
@@ -145,7 +145,8 @@ def structured_detail(page,url,mode,site):
             addr=about.get('address') or n.get('address') or {};addr=addr if isinstance(addr,dict) else {}
             price=number_or_none(offers.get('price'));area=about.get('floorSize') or {};area=area.get('value') if isinstance(area,dict) else area
             photos=n.get('image') or about.get('image') or [];photos=photos if isinstance(photos,list) else [photos]
-            rows.append({**brand(site,row_url),'transaction':mode,'title':title,'propertyType':ptype,'summary':desc[:1800],'price':price,'fees':None,'area':number_or_none(area),'bedrooms':number_or_none(about.get('numberOfBedrooms')),'bathrooms':number_or_none(about.get('numberOfBathroomsTotal')),'streetAddress':addr.get('streetAddress'),'postalCode':addr.get('postalCode'),'location':' '.join(str(addr.get(k) or '') for k in ('postalCode','addressLocality')).strip(),'photos':valid_photos([urljoin(url,p.get('url') or p.get('contentUrl') or '') if isinstance(p,dict) else urljoin(url,p) for p in photos if p]),'features':extract_features(desc),'energyText':desc,'publicationDate':n.get('datePublished')})
+            energy_fields=[(k,about.get(k) or n.get(k)) for k in ('energyEfficiencyClass','energyRating','energyClass','energielabel','epc','peb')]
+            rows.append({**brand(site,row_url),'transaction':mode,'title':title,'propertyType':ptype,'summary':desc[:1800],'price':price,'fees':None,'area':number_or_none(area),'bedrooms':number_or_none(about.get('numberOfBedrooms')),'bathrooms':number_or_none(about.get('numberOfBathroomsTotal')),'streetAddress':addr.get('streetAddress'),'postalCode':addr.get('postalCode'),'location':' '.join(str(addr.get(k) or '') for k in ('postalCode','addressLocality')).strip(),'photos':valid_photos([urljoin(url,p.get('url') or p.get('contentUrl') or '') if isinstance(p,dict) else urljoin(url,p) for p in photos if p]),'features':extract_features(desc),'energyRating':next((v for k,v in energy_fields if v),None),'energyText':desc+' '+' '.join(f'{k} {v}' for k,v in energy_fields if v),'publicationDate':n.get('datePublished')})
     return rows
 
 def pagination(page,url):

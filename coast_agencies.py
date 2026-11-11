@@ -8,6 +8,7 @@ from agency_discovery import normalized_domain, _robots, _fetch
 from agency_parsers import Tree, amount, brand, kind
 from model import valid_photos
 from beach_distance import extract_coordinates, add_beach_distance
+from energy_detail import extract_detail_energy
 from urllib.parse import urljoin
 from concurrent.futures import ThreadPoolExecutor
 import re
@@ -106,7 +107,8 @@ def collect_euroimmo(criteria,website,catalogue):
                            'location':location,'postalCode':'8620' if city.lower()=='nieuwpoort' else None,
                            'streetAddress':address.rsplit(',',1)[0].strip() if ',' in address else None,
                            'price':price,'bedrooms':int(beds[1]) if beds else None,
-                           'summary':description[:1200],'photos':valid_photos(gallery or ([urljoin(url,photo)] if photo else []))}
+                           'summary':description[:1200],'photos':valid_photos(gallery or ([urljoin(url,photo)] if photo else [])),
+                           'energyRating':extract_detail_energy(detail_html)}
                 coordinates=extract_coordinates(detail_html)
                 if coordinates:
                     rows[url]['latitude'],rows[url]['longitude']=coordinates
@@ -172,7 +174,7 @@ def collect_padiva(criteria,website,catalogue):
                 rows.append({**brand(site,url),'transaction':'coast','title':title,'propertyType':ptype,
                              'location':location,'postalCode':city[1] if city else None,'streetAddress':address.split(location)[0].strip() if location else None,
                              'price':price,'area':amount(area[1]) if area else None,'bedrooms':int(beds[1]) if beds else None,
-                             'summary':description,'photos':photos})
+                             'summary':description,'photos':photos,'energyRating':extract_detail_energy(detail)})
                 coordinates=extract_coordinates(detail)
                 if coordinates:
                     rows[-1]['latitude'],rows[-1]['longitude']=coordinates

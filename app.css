@@ -576,3 +576,5 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .apartment-map-marker span{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:48px;height:28px;padding:0 9px;border:2px solid #fff;border-radius:15px;background:#b34f37;color:#fff;box-shadow:0 2px 7px #18251e55;font:700 11px/1 'DM Sans',sans-serif;white-space:nowrap;transition:transform .16s ease,box-shadow .16s ease}
 .apartment-map-marker span:after{position:absolute;left:50%;bottom:-7px;width:11px;height:11px;content:"";background:#b34f37;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:translateX(-50%) rotate(45deg)}
 .leaflet-marker-icon.apartment-map-marker:hover span,.leaflet-marker-icon.apartment-map-marker:focus span{z-index:2;transform:translateY(-4px) scale(1.06);box-shadow:0 6px 13px #18251e55}
+.summary-points{margin:9px 0;padding-left:17px;color:#59655d;font-size:11px;line-height:1.4}
+.summary-points li{margin:3px 0}
