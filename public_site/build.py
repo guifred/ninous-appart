@@ -5,12 +5,13 @@ from zoneinfo import ZoneInfo
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from model import DEFAULT_RENT, DEFAULT_SALE, RENOVATION_RATES, RENOVATION_REFERENCE, valid_photos
+from model import DEFAULT_RENT, DEFAULT_SALE, DEFAULT_COAST, COASTAL_AREAS, RENOVATION_RATES, RENOVATION_REFERENCE, valid_photos
 from scraper import AREAS, NEARBY_AREAS
 from gems import select_gems
 
@@ -30,7 +31,8 @@ def write(path, value):
 
 
 def defaults():
-    return {m: {**c, 'areas': ', '.join(COMMUNES), 'nearby': False} for m,c in [('rent',DEFAULT_RENT),('sale',DEFAULT_SALE)]}
+    return {**{m: {**c, 'areas': ', '.join(COMMUNES), 'nearby': False} for m,c in [('rent',DEFAULT_RENT),('sale',DEFAULT_SALE)]},
+            'coast':{**DEFAULT_COAST,'areas':', '.join(COASTAL_AREAS)}}
 
 
 def sanitize_row(row, cached=None):
@@ -39,14 +41,22 @@ def sanitize_row(row, cached=None):
     for k in ('agencyName','agencyLogo','agencyWebsite'):
         if isinstance((cached.get('branding') or {}).get(k),str): result[k]=cached['branding'][k]
     result['features'] = {k: v for k,v in (row.get('features') or {}).items() if k in FEATURES and (v is True or v is False or v is None)}
-    result['photos'] = valid_photos(list(row.get('photos') or []) + list(cached.get('photos') or []))[:12]
+    result['photos'] = valid_photos(list(row.get('photos') or []) + list(cached.get('photos') or []), listing_url=row.get('url'))
     return result
 
 
 def sanitize_status(status):
     result = {k:status[k] for k in ('lastRun','lastAttempt','state','partial','transaction') if k in status}
     result['nextRun'] = '10 h et 17 h · heure belge (horaire indicatif)'
-    result['sources'] = [{k:r[k] for k in ('source','ok','found','partial') if k in r} for r in status.get('sources',[]) if isinstance(r,dict)]
+    result['sources'] = []
+    for row in status.get('sources',[]):
+        if not isinstance(row,dict):
+            continue
+        public = {k:row[k] for k in ('source','ok','found','partial') if k in row}
+        domain = row.get('domain')
+        if isinstance(domain,str) and re.fullmatch(r'[a-z0-9.-]+\.[a-z]{2,}',domain,re.I):
+            public['domain'] = domain
+        result['sources'].append(public)
     if status.get('error'): result['error']='La dernière collecte n’a pas abouti.'
     return result
 
@@ -55,7 +65,7 @@ def build(output, data_dir=None, state_output=None):
     output=Path(output); data_dir=Path(data_dir or ROOT/'data'); output.mkdir(parents=True,exist_ok=True)
     config={'defaults':defaults(),'areaAliases':AREAS,'nearby':NEARBY_AREAS,'renovationRates':RENOVATION_RATES,'renovationReference':RENOVATION_REFERENCE}
     files={}; photo_cache=read(data_dir/'photo-cache.json',{})
-    for mode in ('rent','sale'):
+    for mode in ('rent','sale','coast'):
         seed=read(ROOT/'public-data'/(mode+'.json'),{})
         source=read(data_dir/mode/'listings.json',seed.get('items',[]))
         rows=[sanitize_row(r,photo_cache.get(mode+':'+str(r.get('id')),{})) for r in source]

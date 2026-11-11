@@ -2,7 +2,7 @@
 from html.parser import HTMLParser
 from functools import lru_cache
 from branding import logo_attributes, structured_brand, with_branding
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, parse_qs, unquote
 from urllib.robotparser import RobotFileParser
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
@@ -10,7 +10,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 import html, json, re, time, ssl, unicodedata, subprocess, fcntl
-from model import MODES, DEFAULT_RENT, DEFAULT_SALE, atomic_json, normalize_listing, evaluate_listing, best_rows, valid_photos, number_or_none
+from model import MODES, DEFAULT_RENT, DEFAULT_SALE, DEFAULT_COAST, atomic_json, normalize_listing, evaluate_listing, best_rows, valid_photos, number_or_none
 from agency_discovery import collect_agency_listings, normalized_domain, _read_json as read_agency_json, MONITOR_FILE, SITES_FILE
 from biddit import collect_biddit
 from sorimo import collect_sorimo, refresh_modes
@@ -108,6 +108,20 @@ AREAS.update({
     'uccle': ('1180-ukkel','Uccle'),
     'watermael-boitsfort': ('1170-watermaal-bosvoorde','Watermael-Boitsfort'),
     'watermael boitsfort': ('1170-watermaal-bosvoorde','Watermael-Boitsfort'),
+})
+AREAS.update({
+    'de panne': ('8660-de-panne','De Panne'), '8660': ('8660-de-panne','De Panne'),
+    'koksijde': ('8670-koksijde','Koksijde'), '8670': ('8670-koksijde','Koksijde'),
+    'oostduinkerke': ('8670-oostduinkerke','Oostduinkerke'),
+    'nieuwpoort': ('8620-nieuwpoort','Nieuwpoort'), '8620': ('8620-nieuwpoort','Nieuwpoort'),
+    'middelkerke': ('8430-middelkerke','Middelkerke'), '8430': ('8430-middelkerke','Middelkerke'),
+    'westende': ('8434-westende','Westende'),
+    'bredene': ('8450-bredene','Bredene'), '8450': ('8450-bredene','Bredene'),
+    'de haan': ('8420-de-haan','De Haan'), '8420': ('8420-de-haan','De Haan'),
+    'blankenberge': ('8370-blankenberge','Blankenberge'), '8370': ('8370-blankenberge','Blankenberge'),
+    'zeebrugge': ('8380-zeebrugge','Zeebrugge'), '8380': ('8380-zeebrugge','Zeebrugge'),
+    'knokke-heist': ('8300-knokke-heist','Knokke-Heist'), 'knokke': ('8300-knokke-heist','Knokke-Heist'),
+    '8300': ('8300-knokke-heist','Knokke-Heist'), '8301': ('8301-heist-aan-zee','Heist-aan-Zee'),
 })
 NEARBY_AREAS={
     'woluwe saint lambert':('Woluwe-Saint-Pierre','Evere','Schaerbeek','Etterbeek'),
@@ -207,7 +221,7 @@ def srcset_urls(value):
 
 def photo_attrs(attrs):
     out=[]
-    for key in ('src','data-src','data-lazy-src','data-original','data-image','data-fallback-src'):
+    for key in ('src','data-src','data-lazy-src','data-original','data-image','data-fallback-src','data-flickity-lazyload'):
         if attrs.get(key):out.append(attrs[key])
     for key in ('srcset','data-srcset','data-lazy-srcset'):
         if attrs.get(key):out.extend(srcset_urls(attrs[key]))
@@ -243,15 +257,27 @@ def parse_detail_photos(page, base_url):
                     for key in ('url','contentUrl','thumbnailUrl'):
                         if isinstance(value.get(key),str):candidates.append(value[key]);structured_images.append(value[key])
             if isinstance(node.get('@graph'),list):todo.extend(node['@graph'])
+    gallery_links=[]
+    for tag in re.findall(r'<a\b[^>]*>',page,re.I):
+        if not re.search(r'\bdata-fancybox(?:-[\w-]+)?\s*=',tag,re.I):continue
+        href=re.search(r'\bhref=["\']([^"\']+)["\']',tag,re.I)
+        if href:gallery_links.append(html.unescape(href.group(1)))
+    if len(valid_photos([urljoin(base_url,url) for url in gallery_links]))>1:
+        candidates=gallery_links+structured_images
     # Image delivery often emits the same photograph at several resolutions.
     # Keep its stable image ID once, using the largest advertised rendition.
     groups={};order=[]
     for value in valid_photos([urljoin(base_url,value) for value in candidates]):
-        parsed=urlparse(value);match=re.search(r'/images/([^/]+)',parsed.path,re.I)
+        wrapped=parse_qs(urlparse(value).query).get('url',[])
+        if '/proxy-image' in urlparse(value).path and wrapped and wrapped[0].startswith('https://'):
+            value=wrapped[0]
+        parsed=urlparse(value);match=re.search(r'/images/([^/]+)(?:/([^/]+))?',parsed.path,re.I)
         if match:
-            key='image:'+match.group(1)
+            image_id=match.group(2) if match.group(1).isdigit() and match.group(2) else match.group(1)
+            image_id=re.sub(r'_tn\d+(?=\.[^.]+$)','',image_id,flags=re.I)
+            key='image:'+parsed.netloc+':'+image_id
             size=re.search(r'/size/(\d+)x(\d+)',parsed.path,re.I)
-            rank=1000000+int(size.group(1))*int(size.group(2)) if size else 400 if 'extralarge' in parsed.path.lower() else 300 if 'large' in parsed.path.lower() else 200 if 'medium' in parsed.path.lower() else 100
+            rank=1000000+int(size.group(1))*int(size.group(2)) if size else 400 if 'extralarge' in parsed.path.lower() else 300 if 'large' in parsed.path.lower() else 200 if 'medium' in parsed.path.lower() else 50 if re.search(r'_tn\d+\.',parsed.path,re.I) else 100
         elif '/thumbnail-webp/' in parsed.path or '/gallery-like-image/' in parsed.path:
             key='preview:'+parsed.netloc+parsed.path.split('/')[3];rank=0
         else:
@@ -260,10 +286,29 @@ def parse_detail_photos(page, base_url):
         elif rank>groups[key][0]:groups[key]=(rank,value)
     if any(k.startswith('image:') for k in groups):order=[k for k in order if not k.startswith('preview:')]
     for value in structured_images:
-        m=re.search(r'/images/([^/]+)',urlparse(urljoin(base_url,value)).path,re.I)
-        key='image:'+m.group(1) if m else None
+        parsed=urlparse(urljoin(base_url,value));m=re.search(r'/images/([^/]+)(?:/([^/]+))?',parsed.path,re.I)
+        image_id=(m.group(2) if m.group(1).isdigit() and m.group(2) else m.group(1)) if m else None
+        if image_id:image_id=re.sub(r'_tn\d+(?=\.[^.]+$)','',image_id,flags=re.I)
+        key='image:'+parsed.netloc+':'+image_id if image_id else None
         if key in order:order.remove(key);order.insert(0,key)
-    return [groups[k][1] for k in order][:12]
+    photos=[groups[k][1] for k in order]
+    if (urlparse(base_url).hostname or '').endswith('dewaele.com'):
+        property_images=[]
+        for value in photos:
+            decoded=unquote(value)
+            match=re.search(r'/(?:iam-property-pictures-02/)?([0-9a-f]{8}-[0-9a-f-]{27,})/([^/?]+\.(?:jpe?g|png|webp))',decoded,re.I)
+            if match and not re.search(r'(?:thumbnail|STYLE_)',match.group(2),re.I):
+                property_images.append((match.group(1),match.group(2),value))
+        if property_images:
+            dominant=max({x[0] for x in property_images},key=lambda ident:sum(x[0]==ident for x in property_images))
+            unique={};order=[]
+            for ident,name,value in property_images:
+                if ident!=dominant:continue
+                if name not in unique:order.append(name)
+                score=1500 if 'h=1500' in value else 1000 if value.startswith('https://s3.') else 0
+                if name not in unique or score>unique[name][0]:unique[name]=(score,value)
+            return [unique[name][1] for name in order]
+    return valid_photos(photos,listing_url=base_url)
 
 
 @lru_cache(maxsize=2)
@@ -304,11 +349,21 @@ def source_area_matches(criteria, location):
     if not requested:return False
     for raw in requested:
         wanted=normalize(raw)
-        if wanted and (wanted in loc or loc in wanted):return True
-        for key,(slug,name) in AREAS.items():
-            if normalize(key) in wanted or wanted in normalize(key) or normalize(name)==wanted:
-                route_name=slug.split('-',1)[-1]
-                if normalize(name) in loc or normalize(route_name) in loc:return True
+        coastal_codes={'middelkerke':('8430','8433','8434'),'knokke heist':('8300','8301')}
+        coastal_districts={'koksijde':('oostduinkerke','sint idesbald'),
+                           'middelkerke':('westende','lombardsijde'),
+                           'de haan':('wenduine',),
+                           'knokke heist':('knokke','heist aan zee','duinbergen','het zoute')}
+        if any(district in loc for district in coastal_districts.get(wanted,())):return True
+        if any(re.search(r'\b'+code+r'\b',location) for code in coastal_codes.get(wanted,())):return True
+        if wanted and loc and re.search(r'\b'+re.escape(wanted)+r'\b',loc):return True
+        exact=[pair for key,pair in AREAS.items() if normalize(key)==wanted or normalize(pair[1])==wanted]
+        pairs=exact or [pair for key,pair in AREAS.items() if normalize(key) in wanted or wanted in normalize(key)]
+        for slug,name in pairs:
+            route_name=slug.split('-',1)[-1]
+            if normalize(name) in loc or normalize(route_name) in loc:return True
+            postal=slug.split('-',1)[0]
+            if re.search(r'\b'+re.escape(postal)+r'\b',location):return True
         if re.search(r'\b\d{4}\b',raw) and re.search(r'\b'+re.escape(re.search(r'\b\d{4}\b',raw).group())+r'\b',location):return True
     return False
 
@@ -548,7 +603,8 @@ def expanded_areas(criteria):
     pairs=[];names=[]
     for raw in requested:
         wanted=normalize(raw)
-        pair=next((value for key,value in AREAS.items() if normalize(key) in wanted or wanted in normalize(key) or normalize(value[1])==wanted),None)
+        pair=next((value for key,value in AREAS.items() if normalize(key)==wanted or normalize(value[1])==wanted),None)
+        if pair is None:pair=next((value for key,value in AREAS.items() if normalize(key) in wanted or wanted in normalize(key)),None)
         if pair is None:
             folded=''.join(c for c in unicodedata.normalize('NFKD',raw) if not unicodedata.combining(c));pair=(re.sub(r'[^a-z0-9]+','-',folded.lower()).strip('-'),raw)
         if pair not in pairs:pairs.append(pair);names.append(pair[1])
@@ -563,8 +619,8 @@ def expanded_areas(criteria):
 
 
 def ensure_mode_data():
-    rent=DATA/'rent';sale=DATA/'sale'
-    rent.mkdir(parents=True,exist_ok=True);sale.mkdir(parents=True,exist_ok=True)
+    rent=DATA/'rent';sale=DATA/'sale';coast=DATA/'coast'
+    for folder in (rent,sale,coast):folder.mkdir(parents=True,exist_ok=True)
     legacy_criteria=DATA/'criteria.json';legacy_listings=DATA/'listings.json';legacy_status=DATA/'status.json'
     if not (rent/'criteria.json').exists():
         old=json.loads(legacy_criteria.read_text()) if legacy_criteria.exists() else DEFAULT_RENT
@@ -573,6 +629,9 @@ def ensure_mode_data():
         rent_criteria=json.loads((rent/'criteria.json').read_text()) if (rent/'criteria.json').exists() else DEFAULT_RENT
         sale_criteria={**DEFAULT_SALE,'areas':rent_criteria.get('areas',''),'nearby':rent_criteria.get('nearby',True)}
         atomic_json(sale/'criteria.json',sale_criteria)
+    if not (coast/'criteria.json').exists():atomic_json(coast/'criteria.json',DEFAULT_COAST)
+    for name,default in (('listings.json',[]),('status.json',{})):
+        if not (coast/name).exists():atomic_json(coast/name,default)
     for name,legacy,default in (('listings.json',legacy_listings,[]),('status.json',legacy_status,{})):
         if not (rent/name).exists():
             value=json.loads(legacy.read_text()) if legacy.exists() else default
@@ -596,6 +655,14 @@ def _adapter(mode,criteria,requested,now,previous_by_id=None):
     types=['house'] if 'house' in ptype and 'apartment' not in ptype else ['apartment']
     if 'apartment or house' in ptype:types=['apartment','house']
     route='for-rent' if mode=='rent' else 'for-sale'
+    if mode=='coast':
+        from coast_agencies import collect_coast_agencies
+        agency_rows,agency_results=collect_coast_agencies(criteria)
+        rows.extend(agency_rows)
+        for result in agency_results:
+            results.append(result)
+            if result.get('ok'):active.append(result['source'])
+            if not result.get('ok') or result.get('partial'):failed_sources.add(result['source'])
     for slug,name in areas:
         for kind in types:
             url=f'{HOST}/en/real-estate/{kind}/{route}/{slug}'
@@ -607,6 +674,7 @@ def _adapter(mode,criteria,requested,now,previous_by_id=None):
                         if page_index and not robots_ok(page_url):raise PermissionError('Pagination disallowed by robots.txt')
                         page=first_page if page_index==0 else fetch(page_url)
                         for row in parse_cards(page,mode):
+                            if mode=='coast' and not source_area_matches(criteria,row.get('location','')):continue
                             row['id']='immovlan-'+re.sub(r'[^a-zA-Z0-9]+','-',row['url'].rstrip('/').split('/')[-1]).lower()
                             row['areaSearch']=name
                             if mode=='rent':row['availability']=next((m.group(0) for m in [re.search(r'(?:available|availability|libre|beschikbaar)[^.;]{0,55}',row['summary'],re.I)] if m),'À confirmer auprès de l’agence')
@@ -619,6 +687,17 @@ def _adapter(mode,criteria,requested,now,previous_by_id=None):
             except Exception as e:
                 failed_sources.add('Immovlan');results.append({'source':'Immovlan','area':name,'type':kind,'ok':False,'reason':str(e)[:250]})
             time.sleep(1.2)
+    if mode=='coast':
+        try:
+            biddit_rows,biddit_result=collect_biddit('sale',include_houses='house' in ptype)
+            biddit_rows=[r for r in biddit_rows if source_area_matches(criteria,r.get('location',''))]
+            biddit_result.update({'transaction':'coast','found':len(biddit_rows)})
+            rows.extend(biddit_rows);results.append(biddit_result)
+            if biddit_result.get('ok'):active.append('Biddit')
+            if biddit_result.get('partial'):failed_sources.add('Biddit')
+        except Exception as e:
+            failed_sources.add('Biddit');results.append({'source':'Biddit','transaction':'coast','ok':False,'reason':str(e)[:250]})
+        return rows,results,sorted(set(active)),failed_sources
     for name,host,url,parser,modes in (
         ('Easy Properties',EASY_HOST,EASY_LISTINGS if mode=='rent' else EASY_SALE_LISTINGS,parse_easy_properties,('rent','sale')),
         ('Red Immobilier',RED_HOST,RED_LISTINGS if mode=='rent' else RED_SALE_LISTINGS,parse_red_properties,('rent','sale')),
@@ -725,6 +804,12 @@ def _collect_unlocked(mode='rent'):
         status={'state':'no-areas','transaction':mode,'lastRun':stamp,'nextRun':'10:00 et 17:00 Europe/Brussels','activeSources':[],'sources':[],'note':'Ajoutez une commune ou un code postal pour lancer la collecte.','matchingCount':0,'nearMissCount':0,'displayedCount':0}
         atomic_json(mode_file(mode,'status.json'),status);print(json.dumps({'status':status,'results':len(old)},ensure_ascii=False));return old
     found,source_results,active,failed=_adapter(mode,criteria,requested,stamp,previous)
+    if not any(x.get('ok') for x in source_results):
+        prior_status=json.loads(mode_file(mode,'status.json').read_text())
+        prior_status.update({'state':'source-error','lastAttempt':stamp,'error':'Aucune source n’a répondu lors de cette tentative; les annonces de la dernière collecte réussie sont conservées.','attemptSources':source_results})
+        atomic_json(mode_file(mode,'status.json'),prior_status)
+        print(json.dumps({'status':prior_status,'results':len(old),'retained':True},ensure_ascii=False))
+        return old
     seen={};today=now.date().isoformat()
     deduped=deduplicate_listings(found,mode,today,previous)
     for row in deduped:
@@ -755,7 +840,7 @@ def _collect_unlocked(mode='rent'):
 
 
 def collect(mode='rent'):
-    if mode not in MODES:raise ValueError('Mode must be rent or sale')
+    if mode not in MODES:raise ValueError('Mode must be rent, sale, or coast')
     ensure_mode_data();lock_path=DATA/mode/'.collection.lock'
     with lock_path.open('w') as lock:
         try:fcntl.flock(lock.fileno(),fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -765,10 +850,14 @@ def collect(mode='rent'):
         finally:fcntl.flock(lock.fileno(),fcntl.LOCK_UN)
 
 
-def collect_all():
+def collect_all(order=MODES):
     outcomes={}
-    for mode in MODES:
-        try:outcomes[mode]={'ok':True,'count':len(collect(mode))}
+    for mode in order:
+        try:
+            count=len(collect(mode))
+            status=json.loads(mode_file(mode,'status.json').read_text())
+            outcomes[mode]={'ok':status.get('state')!='source-error','count':count}
+            if status.get('state')=='source-error':outcomes[mode]['error']='Aucune source n’a répondu; les annonces précédentes sont conservées.'
         except CollectionBusyError as e:
             outcomes[mode]={'ok':False,'busy':True,'error':str(e)}
         except Exception as e:

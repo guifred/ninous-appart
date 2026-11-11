@@ -7,6 +7,7 @@ import json
 import time
 from scraper import collect_all
 from agency_discovery import verify_sites
+from gallery_enrichment import enrich_galleries
 
 ROOT = Path(__file__).resolve().parent
 DATA = ROOT / 'data'
@@ -19,23 +20,26 @@ def next_run(now):
     upcoming = [candidate for candidate in candidates if candidate > now]
     if upcoming:
         return min(upcoming)
-    return (now + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return (now + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
 
 
 def daily_run():
     print('Starting scheduled collection at', datetime.now(TZ).isoformat(timespec='seconds'))
-    # Recheck only websites with recorded terms permission. Discovery itself uses
-    # a user-supplied licensed CBE Open Data archive and is run when that changes.
+    # Prioritize coastal catalogues so their daily refresh completes even if
+    # broader Brussels collection or agency discovery takes longer.
+    outcomes=collect_all(order=('coast','rent','sale'))
+    print('Collection outcomes:',json.dumps(outcomes,ensure_ascii=False),flush=True)
     try:
-        # Recheck the complete bounded agency registry each run (currently <100
-        # sites); public pages are still gated by recorded permission and robots.
+        galleries=enrich_galleries(limit=80)
+        print('Photo galleries:',json.dumps(galleries,ensure_ascii=False),flush=True)
+    except Exception as e:
+        print('Photo gallery enrichment failed:',str(e)[:300],flush=True)
+    # Recheck discovered agencies after the time-sensitive collections.
+    try:
         coverage=verify_sites(limit=500)
         print('Agency site checks:',json.dumps(coverage,ensure_ascii=False))
     except Exception as e:
         print('Agency discovery failed:',str(e)[:500])
-    # Each transaction runs independently so a rent-source failure cannot skip sales.
-    outcomes=collect_all()
-    print('Collection outcomes:',json.dumps(outcomes,ensure_ascii=False))
     return outcomes
 
 

@@ -171,7 +171,11 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
             while queue and result['pages']<max_pages:
                 url=queue.pop(0)
                 if url in visited:continue
-                visited.add(url);page=read(url);result['pages']+=1
+                visited.add(url)
+                try:page=read(url)
+                except Exception as exc:
+                    result['partial']=True;errors.append(str(exc)[:140]);continue
+                result['pages']+=1
                 found=parse_catalogue(page,url,mode,site);result['parsed']+=len(found)
                 if found:has_supported=True
                 for row in found:add(row)
@@ -208,6 +212,18 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
                         original=rows[url];temp={**original,'id':'sorimo-'+url.rstrip('/').split('/')[-1]}
                         enriched=enrich(temp,page);enriched['id']=original['id'];rows[url]=enriched
                 except Exception as exc:errors.append(str(exc)[:140])
+            if site.get('coastal') and rows:
+                from scraper import parse_detail_photos
+                pending=[(url,row) for url,row in rows.items() if url not in detail_urls[:max_details]]
+                if len(pending)>max(0,max_details-result['details']):
+                    result['partial']=True;errors.append('Galeries de certaines annonces non vérifiées : limite de pages atteinte')
+                for url,row in pending[:max(0,max_details-result['details'])]:
+                    try:
+                        page=read(url);result['details']+=1
+                        photos=parse_detail_photos(page,url)
+                        if photos:row['photos']=valid_photos(photos)
+                    except Exception as exc:
+                        result['partial']=True;errors.append('Galerie '+urlsplit(url).path+': '+str(exc)[:100])
             if not has_supported and not rows:raise ValueError('Public catalogue structure not supported or no active residential adverts')
             result['ok']=True
     except Exception as exc:errors.append(str(exc)[:200]);result['partial']=True

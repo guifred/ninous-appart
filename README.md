@@ -1,6 +1,6 @@
-# Ninou’s appart · Bruxelles
+# Ninou’s appart · Bruxelles et côte belge
 
-Recherche d’appartements à louer et à vendre, carte, photos, pépites et favoris.
+Recherche d’appartements à louer et à vendre à Bruxelles, et d’appartements à acheter dans dix communes de la côte belge, avec carte, photos, pépites et favoris.
 
 Le site est hébergé gratuitement sur GitHub Pages. Les critères, favoris et estimations personnelles restent dans le navigateur de chaque visiteur. Le bouton **Appliquer les filtres** parcourt les annonces déjà collectées ; il ne lance pas de collecte supplémentaire. Les photos supplémentaires sont celles déjà présentes dans le catalogue, avec accès à l’annonce d’origine.
 

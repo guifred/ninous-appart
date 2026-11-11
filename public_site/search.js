@@ -14,6 +14,9 @@ function areaMatches(row,c,config){
   }
  }
  if(codes.has('1000'))for(const code of ['1020','1120','1130'])codes.add(code);
+ if(codes.has('8430'))for(const code of ['8433','8434'])codes.add(code);
+ if(codes.has('8300'))codes.add('8301');
+ for(const [municipality,districts] of Object.entries({koksijde:['oostduinkerke','sint idesbald'],middelkerke:['westende','lombardsijde'],'de haan':['wenduine'],'knokke heist':['knokke','heist aan zee','duinbergen','het zoute']}))if(names.has(municipality))for(const district of districts)names.add(district);
  const location=norm(row.location),postal=String(row.postalCode||row.location||'').match(/\b\d{4}\b/)?.[0];
  return !!((postal&&codes.has(postal))||(location&&[...names].some(n=>location.includes(n))));
 }
@@ -70,7 +73,7 @@ function evaluate(original,c,mode,config={},override=null,today=new Date()){
  if(mode==='rent'&&move&&!['sans preference','indifferent','flexible','any','no preference'].includes(move)){
   if(/immediat|immediately|asap|maintenant/.test(move)?!/immediat|immediately|now/.test(availability):!availability.includes(move))unknown.push('date de disponibilité à confirmer');
  }
- if(mode==='sale'){
+ if(mode!=='rent'){
   bound(fees,null,c.maxCondoFees,'charges de copropriété non précisées','','charges de copropriété au-dessus du maximum');
   row.renovation=renovation(row,c,override,config);
   for(const [cap,value,label] of [[c.maxRenovation,row.renovation.high,'budget rénovation'],[c.maxCombined,price===null||row.renovation.high===null?null:price+row.renovation.high,'total achat + rénovation']]){

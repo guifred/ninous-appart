@@ -11,10 +11,10 @@ import re
 import tempfile
 import unicodedata
 from collections import deque
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs, unquote
 
 TZ = ZoneInfo('Europe/Brussels')
-MODES = ('rent', 'sale')
+MODES = ('rent', 'sale', 'coast')
 FEATURES = {
     'terrace': [(r'\bterrace\b', r'\bterrasse\b', r'\bterras\b'), (r'\bno terrace\b', r'\bwithout (?:a )?terrace\b', r'\bpas de terrasse\b', r'\bsans terrasse\b', r'\bgeen terras\b', r'\bzonder terras\b')],
     'balcony': [(r'\bbalcony\b', r'\bbalcon\b', r'\bbalkon\b'), (r'\bno balcony\b', r'\bwithout (?:a )?balcony\b', r'\bpas de balcon\b', r'\bsans balcon\b', r'\bgeen balkon\b', r'\bzonder balkon\b')],
@@ -29,6 +29,8 @@ FEATURES = {
 
 DEFAULT_RENT = {'areas':'', 'minBudget':'', 'maxBudget':'', 'budgetBasis':'rent', 'bedrooms':'', 'property':'Apartment', 'subtypes':[], 'minArea':'', 'maxArea':'', 'features':{}, 'furnished':'any', 'moveDate':'', 'mustHaves':'', 'energyRating':'any', 'floorMin':'', 'floorMax':'', 'publicationDays':'', 'sort':'relevance', 'nearby':True}
 DEFAULT_SALE = {'areas':'', 'minPrice':'', 'maxPrice':'', 'maxPricePerM2':'', 'bedrooms':'', 'property':'Apartment', 'subtypes':[], 'minArea':'', 'maxArea':'', 'features':{}, 'construction':'any', 'condition':'any', 'occupancy':'any', 'maxCondoFees':'', 'renovationScope':'cosmetic', 'renovationRateLow':'', 'renovationRateHigh':'', 'maxRenovation':'', 'maxCombined':'', 'includeUnknownRenovation':False, 'contingencyPct':15, 'vatPct':21, 'energyRating':'any', 'floorMin':'', 'floorMax':'', 'sort':'relevance', 'publicationDays':'', 'nearby':True}
+COASTAL_AREAS = ('De Panne','Koksijde','Nieuwpoort','Middelkerke','Oostende','Bredene','De Haan','Blankenberge','Zeebrugge','Knokke-Heist')
+DEFAULT_COAST = {**DEFAULT_SALE, 'areas': ', '.join(COASTAL_AREAS), 'property': 'Apartment or house', 'nearby': False}
 
 
 def norm(s):
@@ -104,7 +106,9 @@ def normalize_listing(row, mode, today=None, prior=None):
     row['url']=str(row.get('url') or '') if parsed.scheme=='https' and parsed.netloc else ''
     row['id']=str(row.get('id') or (norm(row.get('source'))+'-'+re.sub(r'[^a-zA-Z0-9]+','-',str(row.get('url','')).rstrip('/').split('/')[-1]).lower()))
     row['price']=number_or_none(row.get('price')); row['fees']=number_or_none(row.get('fees')); row['area']=number_or_none(row.get('area')); row['bedrooms']=number_or_none(row.get('bedrooms'))
-    row['photos']=valid_photos(row.get('photos') or [])
+    current=row.get('photos') or []
+    previous=prior.get('photos') or []
+    row['photos']=valid_photos(([current] if isinstance(current,str) else list(current))+([previous] if isinstance(previous,str) else list(previous)),listing_url=row.get('url'))
     row['features']={**extract_features((row.get('title') or '')+' '+(row.get('summary') or '')),**(row.get('features') or {})}
     text=norm((row.get('title') or '')+' '+(row.get('summary') or '')+' '+(row.get('location') or ''))
     row['condition']=row.get('condition') or next((label for terms,label in ((('to renovate','needs renovation','à rénover','à renover','à rafraîchir','te renoveren','renovatie nodig'),'renovation'),(('renovated','rénové','renove','gerenoveerd','refurbished'),'renovated'),(('good condition','bon état','bon etat','goede staat'),'good')) if any(norm(t) in text for t in terms)),None)
@@ -133,8 +137,8 @@ def normalize_listing(row, mode, today=None, prior=None):
     row['publicationDateUncertain']=pub['uncertain'] if pub['value'] else False
     row['lastObserved']=today
     row['sourceModified']=row.get('sourceModified') or None
-    row['photos']=valid_photos(row.get('photos') or [])
-    if mode=='sale':
+    row['photos']=valid_photos(row.get('photos') or [],listing_url=row.get('url'))
+    if mode!='rent':
         row['renovationOverride']=old.get('renovationOverride') or row.get('renovationOverride')
     return row
 
@@ -147,17 +151,82 @@ def number_or_none(value):
     except (ValueError,TypeError):return None
 
 
-def valid_photos(values):
-    result=[]
+def valid_photos(values, listing_url=None):
+    result=[];positions={}
     if isinstance(values,str): values=[values]
     for url in values:
         if not isinstance(url,str):continue
         u=html.unescape(url.strip())
         parsed=urlparse(u)
-        if parsed.scheme!='https' or not parsed.netloc:continue
-        if re.search(r'logo|icon|avatar|placeholder|sprite|flag|badge|favicon|blank|no[-_]?image|nopic',u,re.I):continue
-        if u not in result:result.append(u)
-    return result[:12]
+        if parsed.scheme!='https' or not parsed.hostname or not re.fullmatch(r'[a-z0-9.-]+',parsed.hostname,re.I):continue
+        if parsed.hostname.startswith(('maptile.','epclabel.')):continue
+        path=parsed.path
+        if re.search(r'logo|icon|avatar|placeholder|sprite|flag|badge|favicon|blank|no[-_]?image|nopic|brand|immoscoop|ajax-loader|/pix\.gif|/team/|/epc[_/-]|/energy/|epclabel|maptile|facebook\.jpg|best_workplace|shutterstock|mod_languages|STYLE_|/images/(?:vendu|sold|close)\.png|\.svg$',path,re.I):continue
+        image_path=bool(re.search(r'\.(?:jpe?g|png|webp|gif)$',path,re.I) or re.search(r'/filestore/|/images/|/thumbnail-webp/|/gallery-like-image/|/Public/FileStore\.ashx|/proxy-image',path,re.I))
+        if not image_path:continue
+        if parsed.hostname=='api-image.immovlan.be' and '/thumbnail-webp/' in parsed.path:
+            u=re.sub(r'/thumbnail-webp/(?:Medium|Large|ExtraLarge)(?:\?h=\d+)?','/thumbnail-webp/ExtraLarge?h=900',u,flags=re.I)
+        wrapped=parse_qs(urlparse(u).query).get('url',[])
+        if '/proxy-image' in path and wrapped and wrapped[0].startswith('https://'):
+            u=wrapped[0]
+        if parsed.hostname=='dewaele-cdn.glue.be':
+            original=re.search(r'https://s3\.eu-central-1\.amazonaws\.com/iam-property-pictures-02/[^?&"\s]+\.(?:jpe?g|png|webp)',unquote(u),re.I)
+            if original:u=original.group(0)
+        parsed=urlparse(u);path=unquote(parsed.path);host=parsed.hostname or ''
+        filestore=re.search(r'/filestore/([^/]+)',path,re.I)
+        century=re.search(r'/media/assets/properties/([^/]+)/([^/]+)/',path,re.I)
+        portus=re.search(r'/property_images/(?:full|medium|small)/([^/]+)$',path,re.I)
+        omnicasa=re.search(r'_([0-9]+[A-Z])(?:XL|L|M|S)\.(?:jpe?g|png|webp)$',path,re.I)
+        dewaele=re.search(r'/(?:iam-property-pictures-02/)?([0-9a-f]{8}-[0-9a-f-]{27,})/([^/?]+\.(?:jpe?g|png|webp))',path,re.I)
+        sorimo=re.search(r'/Pictures/([^/]+)/\d{3,4}/([^/]+)$',path,re.I)
+        caenen=re.search(r'/images/(\d+)/([^/]+)$',path,re.I)
+        red=re.search(r'/(?:photos|reduc)/(redimmo\d+[^/]+)$',path,re.I)
+        if filestore:key=host+'/filestore/'+filestore.group(1)
+        elif century:key=host+'/property/'+century.group(1)+'/'+century.group(2)
+        elif portus:key=host+'/property_images/'+portus.group(1)
+        elif omnicasa:key=host+'/omnicasa/'+omnicasa.group(1)
+        elif dewaele:key='dewaele/'+dewaele.group(1)+'/'+dewaele.group(2)
+        elif sorimo:key=host+'/Pictures/'+sorimo.group(1)+'/'+sorimo.group(2)
+        elif caenen:key=host+'/images/'+caenen.group(1)+'/'+re.sub(r'_tn\d+(?=\.)','',caenen.group(2),flags=re.I)
+        elif red:key=host+'/red/'+red.group(1)
+        else:key=host+re.sub(r'/size/\d+x\d+','',path,flags=re.I)
+        size=re.search(r'/size/(\d+)x(\d+)',path,re.I)
+        width=re.search(r'-(\d{3,4})x',path,re.I)
+        numbered=re.search(r'/(\d{3,4})/[^/]+\.(?:jpe?g|png|webp)$',path,re.I)
+        score=(int(size.group(1))*int(size.group(2)) if size else int(width.group(1))**2 if width else int(numbered.group(1))**2 if numbered else 1_000_000)
+        if re.search(r'/small|/medium|_tn\d+|thumbnail|(?:^|/)main-600x',path,re.I):score=min(score,250_000)
+        if re.search(r'/full/|/large/|/extralarge|XL\.',path,re.I):score=max(score,2_000_000)
+        if filestore and path.rstrip('/').endswith(filestore.group(1)):score=3_000_000
+        if red and '/photos/' in path.lower():score=3_000_000
+        if dewaele and 'h=1500' in u:score=2_250_000
+        if key not in positions:positions[key]=(len(result),score);result.append(u)
+        elif score>positions[key][1]:index=positions[key][0];result[index]=u;positions[key]=(index,score)
+    if listing_url and 'century21seaport.be' in listing_url:
+        match=re.search(r'/([0-9]{6,})/',urlparse(listing_url).path)
+        if match:
+            property_id=match.group(1)
+            owned=[u for u in result if '/media/assets/properties/'+property_id+'/' in u]
+            if owned:result=owned
+            else:result=[u for u in result if 'century21seaport.be' not in u or '/properties/'+property_id+'/' in u]
+    if listing_url and 'dewaele.com' in listing_url:
+        tagged=[(u,re.search(r'iam-property-pictures-02/([0-9a-f-]{36})/',unquote(u),re.I)) for u in result]
+        ids=[match.group(1) for _,match in tagged if match]
+        if ids:
+            dominant=max(set(ids),key=ids.count)
+            result=[u for u,match in tagged if match and match.group(1)==dominant and (not re.search(r'thumbnail',unquote(u),re.I) or len(ids)==1)]
+    if listing_url and 'immogroup-s.be' in listing_url:
+        property_id=parse_qs(urlparse(listing_url).query).get('id',[None])[0]
+        if property_id:
+            own=[u for u in result if not re.search(r'cdn\.omnicasapictures\.com',urlparse(u).hostname or '',re.I) or re.search(r'_'+re.escape(property_id)+r'[A-Z](?:XL|L|M|S)\.',urlparse(u).path,re.I)]
+            if own:result=own
+    if listing_url and 'redimmobilier.be' in listing_url:
+        match=re.search(r'/detail/(\d+)',urlparse(listing_url).path)
+        if match:
+            own=[u for u in result if not re.search(r'/(?:photos|reduc)/redimmo\d+',urlparse(u).path,re.I) or re.search(r'/(?:photos|reduc)/redimmo'+match.group(1)+r'\D',urlparse(u).path,re.I)]
+            if own:result=own
+    full_immovlan={re.search(r'/v1/property/([^/]+)/images/',urlparse(u).path,re.I).group(1).lower() for u in result if re.search(r'/v1/property/([^/]+)/images/',urlparse(u).path,re.I)}
+    result=[u for u in result if not (m:=re.search(r'/v1/property/([^/]+)/thumbnail-webp/',urlparse(u).path,re.I)) or m.group(1).lower() not in full_immovlan]
+    return result
 
 
 # Belgian 2025-26 published order-of-magnitude per-m² renovation bands; base references are excl. VAT.
@@ -240,9 +309,9 @@ def evaluate_listing(row, criteria, mode, override=None):
             if row.get('subtype') is None and not any(k in hay for aliaseset in aliases.values() for k in aliaseset):unknown.append('sous-type non précisé')
             else:reasons.append('sous-type incompatible')
     property_type=criteria.get('property','Apartment')
-    if property_type not in ('Apartment','Apartment or house',''):
-        hay=norm((row.get('title') or '')+' '+(row.get('summary') or ''))
-        if 'house' in norm(property_type) and not any(x in hay for x in ('maison','house','woning')):reasons.append('type maison incompatible')
+    if property_type in ('Apartment','House'):
+        actual=row.get('propertyType')
+        if actual and actual!=property_type:reasons.append('type de bien incompatible')
     for key,selected in (('energyRating',criteria.get('energyRating','any')),):
         if selected not in ('any','',None):
             value=row.get(key)
@@ -266,7 +335,7 @@ def evaluate_listing(row, criteria, mode, override=None):
                 expected=selected in ('furnished','meublé','gemeubileerd')
                 if bool(value)!=expected:reasons.append(failed_label)
             elif norm(value)!=norm(selected):reasons.append(failed_label)
-    if mode=='sale' and number_or_none(criteria.get('maxCondoFees')) is not None:
+    if mode!='rent' and number_or_none(criteria.get('maxCondoFees')) is not None:
         if row.get('fees') is None:unknown.append('charges de copropriété non précisées')
         elif row['fees']>number_or_none(criteria['maxCondoFees']):reasons.append('charges de copropriété au-dessus du maximum')
     for field,cap in (('floorMin',None),('floorMax',None)):
@@ -293,7 +362,7 @@ def evaluate_listing(row, criteria, mode, override=None):
         if any(x in move for x in ('immediat','immediately','asap','maintenant')):
             if not any(x in availability for x in ('immediat','immediately','now')):unknown.append('disponibilité immédiate non confirmée')
         elif not availability or move not in availability:unknown.append('date de disponibilité à confirmer')
-    if mode=='sale':
+    if mode!='rent':
         est=renovation_estimate(row,criteria,override)
         row['renovation']=est
         cap=number_or_none(criteria.get('maxRenovation'));combined=number_or_none(criteria.get('maxCombined'))

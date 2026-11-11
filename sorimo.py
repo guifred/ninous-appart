@@ -76,7 +76,7 @@ def enrich(row, page):
     for url in re.findall(r'https://r2\.storagewhise\.eu/sorimo/Pictures/'+ident+r'/[^\s"\'<>\\]+',html.unescape(page)):
         key=urlsplit(url).path.rsplit('/',1)[-1]
         if key not in seen: seen.add(key); photos.append(url)
-    row['photos']=valid_photos(photos or row['photos'])[:12]
+    row['photos']=valid_photos(photos or row['photos'])
     return row
 
 def collect_sorimo(mode, criteria, fetch, robots_ok, area_matches, pause=time.sleep, max_pages=30):

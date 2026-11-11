@@ -16,12 +16,12 @@ async function resultRows(mode){
  const rows=d.items.filter(r=>!r.stale&&search.areaMatches(r,c,m.config)).map(r=>search.evaluate(r,c,mode,m.config,overrides[mode][r.id]));
  evaluated[mode]=rows;return rows;
 }
-window.refreshPublicCatalogue=async()=>{const r=await realFetch(new URL('data/manifest.json',base),{cache:'no-cache'});if(!r.ok)return false;const next=await r.json(),previous=await manifest;if(next.revision===previous.revision)return false;manifest=Promise.resolve(next);for(const m of ['rent','sale']){delete catalogues[m];delete evaluated[m]}return true};
+window.refreshPublicCatalogue=async()=>{const r=await realFetch(new URL('data/manifest.json',base),{cache:'no-cache'});if(!r.ok)return false;const next=await r.json(),previous=await manifest;if(next.revision===previous.revision)return false;manifest=Promise.resolve(next);for(const m of ['rent','sale','coast']){delete catalogues[m];delete evaluated[m]}return true};
 const response=(obj,status=200)=>new Response(JSON.stringify(obj),{status,headers:{'Content-Type':'application/json'}});
 window.fetch=async function(input,options={}){
  const url=new URL(typeof input==='string'?input:input.url,location.href);
  if(url.origin!==location.origin||!url.pathname.startsWith('/api/'))return realFetch(input,options);
- const mode=url.searchParams.get('mode')||'rent';if(!['rent','sale'].includes(mode))return response({error:'Mode inconnu'},400);
+ const mode=url.searchParams.get('mode')||'rent';if(!['rent','sale','coast'].includes(mode))return response({error:'Mode inconnu'},400);
  try{
   const method=options.method||'GET',path=url.pathname;
   if(path==='/api/criteria'){
