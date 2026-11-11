@@ -19,12 +19,30 @@ test('Every card variant includes the same facts and French summary',()=>{
   vm.runInNewContext(cardSource,cardContext);
   const row={id:'1',url:'https://agency.example/1',title:'Appartement',location:'8620 Nieuwpoort',price:200000,photos:[],summary:'Appartement rénové avec terrasse.',condition:'renovated',features:{terrace:true},energyRating:'C',energyRegion:'EPC · Flandre',beachDistanceM:300,beachDistanceBasis:'listing-text'};
   for(const variant of [cardContext.card(row),cardContext.card(row,true,'coast'),cardContext.card(row,false,'coast',true)]){
+    assert.match(variant,/<b>Type<\/b>Appartement/);
+    assert.match(variant,/<b>État<\/b>Rénové/);
+    assert.match(variant,/<b>Énergie<\/b>PEB C \(EPC\)/);
     assert.match(variant,/PEB C \(EPC\)/);
     assert.match(variant,/summary-points/);
     assert.match(variant,/listing-highlights/);
     assert.match(variant,/Plage : env\. 300 m/);
   }
   assert.match(cardContext.card(row,false,'coast',true),/gem-notes/);
+});
+
+test('Map groups approximate postal positions without inventing a Brussels coordinate',()=>{
+  const mapSource=source.slice(source.indexOf('const geoApprox='),source.indexOf('let restoredView=',source.indexOf('const geoApprox=')));
+  const mapContext={...context};
+  vm.runInNewContext(mapSource,mapContext);
+  const postalA=mapContext.mapPoint({id:'a',postalCode:'8620'});
+  const postalB=mapContext.mapPoint({id:'b',postalCode:'8620'});
+  const address=mapContext.mapPoint({id:'c',latitude:51.13,longitude:2.75,beachLocationBasis:'verified-address'});
+  assert.equal(postalA.kind,'postal');
+  assert.equal(address.kind,'address');
+  assert.equal(mapContext.mapPoint({id:'unknown',postalCode:'9999'}),null);
+  const groups=mapContext.groupMapPoints([postalA,postalB,address],12,(lat,lng)=>({x:lng*100,y:lat*100}));
+  assert.equal(groups.length,2);
+  assert.equal(groups.find(group=>group.kind==='postal').items.length,2);
 });
 
 test('Flemish EPC label is shown as the PEB class',()=>{

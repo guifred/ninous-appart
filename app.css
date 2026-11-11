@@ -576,5 +576,27 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .apartment-map-marker span{position:relative;display:inline-flex;align-items:center;justify-content:center;min-width:48px;height:28px;padding:0 9px;border:2px solid #fff;border-radius:15px;background:#b34f37;color:#fff;box-shadow:0 2px 7px #18251e55;font:700 11px/1 'DM Sans',sans-serif;white-space:nowrap;transition:transform .16s ease,box-shadow .16s ease}
 .apartment-map-marker span:after{position:absolute;left:50%;bottom:-7px;width:11px;height:11px;content:"";background:#b34f37;border-right:2px solid #fff;border-bottom:2px solid #fff;transform:translateX(-50%) rotate(45deg)}
 .leaflet-marker-icon.apartment-map-marker:hover span,.leaflet-marker-icon.apartment-map-marker:focus span{z-index:2;transform:translateY(-4px) scale(1.06);box-shadow:0 6px 13px #18251e55}
+
+/* Listing facts keep their meaning visible across all card variants. */
+.visual-fact b,.energy-pill b{font-size:9px;font-weight:600;color:#6c7a70;white-space:nowrap}
+.visual-fact,.energy-pill{gap:5px;white-space:normal}
+.energy-pill b{color:#fff9}
+.suggestions .visual-fact b,.suggestions .energy-pill b{font-size:8px}
+
+/* The colour is a statement about position quality, not property quality. */
+.map-legend{display:flex;flex-wrap:wrap;gap:7px 15px;margin:0 3px 11px;color:#53675b;font-size:10px}
+.map-legend>span{display:inline-flex;align-items:center;gap:6px}
+.map-dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:#3b7659}
+.map-dot.announced{background:#3e75a4}.map-dot.postal{background:#8a7c67}
+.map-marker-address span,.map-marker-address span:after{background:#3b7659}
+.map-marker-announced span,.map-marker-announced span:after{background:#3e75a4}
+.map-marker-postal span,.map-marker-postal span:after{background:#8a7c67}
+.map-marker-cluster span{font-size:10px}
+.map-group-popup{min-width:180px;max-width:310px;font:11px/1.45 'DM Sans',sans-serif}
+.map-group-popup>strong{display:block;margin-bottom:7px;color:#344c3d}
+.map-popup-links{display:grid;gap:4px;max-height:220px;overflow:auto}
+.map-popup-links a,.map-popup-links span{display:block;padding:5px 0;border-top:1px solid #edf0ec;color:#2b5b41;text-decoration:none}
+.map-popup-links a:hover{text-decoration:underline}
+.map-popup-links small{padding:5px 0;color:#6f7c70}
 .summary-points{margin:9px 0;padding-left:17px;color:#59655d;font-size:11px;line-height:1.4}
 .summary-points li{margin:3px 0}
