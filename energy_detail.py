@@ -4,7 +4,7 @@ import re
 from agency_parsers import Tree, Node, clean
 from model import extract_energy_rating
 
-LABEL = re.compile(r'(?:epc|peb)(?:\s+(?:label|klasse|class|classe))?|energielabel|energieklasse|energy\s+(?:label|class)',re.I)
+LABEL = re.compile(r'(?:epc|peb)(?:[\s_-]+(?:label|klasse|class|classe))?|energielabel|energieklasse|energy\s+(?:label|class)',re.I)
 
 
 def _node_evidence(node):

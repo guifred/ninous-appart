@@ -86,6 +86,7 @@ def extract_energy_rating(value):
     text=str(value or '')
     patterns=(
         r'\b(?:epc|peb)\s*:\s*\d{1,4}(?:[,.]\d+)?\s*\(?\s*label\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
+        r'\b(?:epc|peb)[-_ ]*(?:label|klasse|class|classe)[-_ :=/]*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:epc|peb)(?:\s*[/&-]\s*(?:epc|peb))?\s*(?:(?:label|class|klasse|classe|rating|score)\s*)?[\s:=\-\[\]()]{0,10}([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:energy|energie)(?:[- _](?:label|class|klasse|rating|score))?\s*[:=\-\[]?\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:classe\s+(?:énergétique|energetique)|energy\s+(?:class|label|rating)|energieklasse|energielabel)\s*[:=\-]?\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
@@ -93,8 +94,9 @@ def extract_energy_rating(value):
         r'\bei-icon-(?:energy-class-)?([a-g])\b',
     )
     for pattern in patterns:
-        match=re.search(pattern,text,re.I)
-        if match:
+        for match in re.finditer(pattern,text,re.I):
+            before=text[max(0,match.start()-120):match.start()].lower()
+            if re.search(r'(?:(?:epc|peb|energy)[-_ ]simulat\w*|projected|expected energy label).{0,110}$',before,re.I):continue
             rating=match.group(1).upper()
             return rating+((match.group(2) or '').strip() if match.lastindex and match.lastindex>=2 else '')
     direct=re.fullmatch(r'\s*([a-g])\s*(\+{1,2})?\s*',text,re.I)

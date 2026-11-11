@@ -31,6 +31,8 @@ class PublicExportTests(unittest.TestCase):
         self.assertEqual(extract_detail_energy('<tr><td>EPC label</td><td><img src="/epc_label/epc_c.png"></td></tr>'),'C')
         self.assertEqual(extract_detail_energy('<div><div>EPC</div><div class="epc-value"><span class="ei-icon ei-icon-c"></span></div></div>'),'C')
         self.assertEqual(extract_detail_energy('<div>Energielabel: A</div>'),'A')
+        self.assertEqual(extract_detail_energy('<div><span>EPC Label</span><span><img src="/assets/epc-label-b.svg"></span></div>'),'B')
+        self.assertEqual(extract_detail_energy('<dl><dt>EPC label</dt><dd><svg><text>C</text></svg></dd></dl>'),'C')
         self.assertEqual(extract_detail_energy('<p>EPC: 286 (Label C).</p>'),'C')
         self.assertIsNone(extract_detail_energy('<p>EPC: 286 kWh/m².</p>'))
 

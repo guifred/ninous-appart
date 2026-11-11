@@ -53,7 +53,7 @@ jobs:
       - name: Vérifier l’export et les filtres
         run: |
           python3 -m unittest discover -s tests -p 'test_public_site.py' -v
-          node --test tests/public-search.test.cjs tests/public-api.test.cjs
+          node --test tests/public-search.test.cjs tests/public-api.test.cjs tests/public-ui.test.cjs
       - name: Restaurer les données partagées
         run: python3 scripts/bootstrap_cloud.py
       - name: Collecter les locations et les achats
