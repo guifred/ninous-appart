@@ -16,7 +16,7 @@ from scraper import AREAS, NEARBY_AREAS
 from gems import select_gems
 
 COMMUNES = ['Anderlecht','Auderghem','Berchem-Sainte-Agathe','Bruxelles-Ville','Etterbeek','Evere','Forest','Ganshoren','Ixelles','Jette','Koekelberg','Molenbeek-Saint-Jean','Saint-Gilles','Saint-Josse-ten-Noode','Schaerbeek','Uccle','Watermael-Boitsfort','Woluwe-Saint-Lambert','Woluwe-Saint-Pierre']
-FIELDS = set('id source sourceType agencyDomain url title summary location postalCode streetAddress price displayPrice priceLabel priceType saleType fees bedrooms bathrooms area floor propertyType subtype construction constructionYear condition occupancy availability available energyRating energyRegion publicationDate publicationDateUncertain publicationDateOrigin firstDiscovered lastObserved stale latitude longitude agencyName agencyLogo agencyWebsite'.split())
+FIELDS = set('id source sourceType agencyDomain url title summary location postalCode streetAddress price displayPrice priceLabel priceType saleType fees bedrooms bathrooms area floor propertyType subtype construction constructionYear condition occupancy availability available energyRating energyRegion publicationDate publicationDateUncertain publicationDateOrigin firstDiscovered lastObserved stale latitude longitude beachDistanceM beachWalkMinutes beachDistanceBasis beachProximityClaim beachLocationBasis agencyName agencyLogo agencyWebsite'.split())
 FEATURES = set('terrace balcony garden parking lift cellar accessible petsAllowed furnished'.split())
 
 

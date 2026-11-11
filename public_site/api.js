@@ -41,8 +41,7 @@ window.fetch=async function(input,options={}){
    const all=await resultRows(mode),matched=all.filter(r=>r.matchState==='confirmed'),unknown=all.filter(r=>r.matchState==='unknown'),excluded=all.filter(r=>r.matchState==='failed');
    const order=url.searchParams.get('sortBy')||'relevance',section=url.searchParams.get('section')||'matches';
    const suggestions=search.sort(unknown.filter(r=>r.unknownReasons.length===1),order).slice(0,2);
-   // The map includes all collected active listings, irrespective of personal filters.
-   const source=section==='all'?(await data(mode)).items.filter(r=>!r.stale):section==='excluded'?excluded:section==='suggestions'?suggestions:matched;
+   const source=section==='all'?all:section==='excluded'?excluded:section==='suggestions'?suggestions:matched;
    const sorted=search.sort(source,order),page=Math.max(1,Number(url.searchParams.get('page'))||1),size=Math.min(100,Math.max(1,Number(url.searchParams.get('pageSize'))||24));
    const counts={};for(const row of matched)counts[row.source]=(counts[row.source]||0)+1;
    return response({items:sorted.slice((page-1)*size,page*size),total:sorted.length,matches:matched.length,unknown:unknown.length,excluded:excluded.length,page,pageSize:size,hiddenStale:0,sourceCounts:Object.entries(counts).sort((a,b)=>b[1]-a[1]),suggestionItems:suggestions,gemItems:page===1&&section==='matches'?search.selectGems(all):[]});

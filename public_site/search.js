@@ -10,7 +10,6 @@ function areaMatches(row,c,config){
  for(const selectedName of selected){
   for(const [alias,place] of Object.entries(aliases))if(norm(alias)===selectedName||norm(place[1])===selectedName){
    codes.add(place[0].split('-')[0]);names.add(norm(place[1]));names.add(norm(place[0].split('-').slice(1).join(' ')));
-   if(c.nearby)for(const n of (config.nearby||{})[norm(place[1])]||[])for(const [a,p] of Object.entries(aliases))if(norm(p[1])===norm(n)){codes.add(p[0].split('-')[0]);names.add(norm(n))}
   }
  }
  if(codes.has('1000'))for(const code of ['1020','1120','1130'])codes.add(code);

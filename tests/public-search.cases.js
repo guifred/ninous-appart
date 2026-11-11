@@ -13,8 +13,10 @@ function publicSearchCases(){
  check(s.evaluate({...row,price:200000},{maxCombined:210000},'sale',config,{low:1000,high:2000}).matchState==='confirmed','Personal estimate');
  check(s.areaMatches(row,{areas:'Ixelles'},config),'Selected commune');
  check(!s.areaMatches(row,{areas:'Uccle'},config),'Other commune excluded');
+ config.nearby.ixelles=['Uccle'];
+ check(!s.areaMatches({...row,location:'1180 Ukkel',postalCode:'1180'},{areas:'Ixelles',nearby:true},config),'Nearby commune excluded from selected results');
  check(!s.areaMatches(row,{areas:''},config),'Empty selection');
  const sorted=s.sort([{price:null},{price:50},{price:100}],'price_desc');check(sorted[0].price===100&&sorted[2].price===null,'Unknown price sorted last');
  const gem={score:10,cautions:[],reasons:['Terrasse']};check(s.selectGems([{...row,gem,matchState:'failed',unknownReasons:[]}]).length===0,'Failed match never a gem');
- return '14 matching, sorting and preference checks passed';
+ return '15 matching, sorting and preference checks passed';
 }

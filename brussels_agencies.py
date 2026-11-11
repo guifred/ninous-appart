@@ -165,6 +165,14 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
             paths=[s['url'] for s in samples if not s.get('error') and ('/bien/' not in s['url']) and not re.search(r'/\d{5,}/?$',urlsplit(s['url']).path)]
             paths=[p for p in paths if not re.search(r'/services?/|/Page/|/page/|verhuren|verkopen|/\d{5,}/?$',urlsplit(p).path)]
             paths=list(dict.fromkeys(paths))[:2]
+            if not paths:
+                if domain=='victoire.be':paths=['https://victoire.be/fr/'+('a-louer' if mode=='rent' else 'a-vendre')]
+                elif domain=='bytheway.immo':paths=['https://bytheway.immo/'+('biens-a-louer' if mode=='rent' else 'biens-a-vendre')+'/']
+                else:
+                    homepage=read(home)
+                    if any(token in homepage.lower() for token in ('cf-chl-','verify you are human','just a moment...')):
+                        raise RuntimeError('Browser challenge on agency homepage')
+                    paths=[p for p in discover_catalogues(homepage,home,mode) if not re.search(r'/services?/|/Page/|/page/|verhuren|verkopen|/\d{5,}/?$',urlsplit(p).path)][:2]
             if not paths:raise ValueError('No public '+mode+' catalogue identified')
             queue=list(paths);visited=set();detail_candidates=set();has_supported=False
             route=('a-louer','location','te-huur','rent') if mode=='rent' else ('a-vendre','vente','te-koop','sale')
@@ -214,6 +222,7 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
                 except Exception as exc:errors.append(str(exc)[:140])
             if site.get('coastal') and rows:
                 from scraper import parse_detail_photos
+                from beach_distance import extract_coordinates, listing_description, add_beach_distance
                 pending=[(url,row) for url,row in rows.items() if url not in detail_urls[:max_details]]
                 if len(pending)>max(0,max_details-result['details']):
                     result['partial']=True;errors.append('Galeries de certaines annonces non vérifiées : limite de pages atteinte')
@@ -222,6 +231,12 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
                         page=read(url);result['details']+=1
                         photos=parse_detail_photos(page,url)
                         if photos:row['photos']=valid_photos(photos)
+                        description=listing_description(page)
+                        if len(description)>len(row.get('summary') or ''):row['summary']=description
+                        coordinates=extract_coordinates(page)
+                        if coordinates:
+                            row['latitude'],row['longitude']=coordinates
+                        add_beach_distance(row)
                     except Exception as exc:
                         result['partial']=True;errors.append('Galerie '+urlsplit(url).path+': '+str(exc)[:100])
             if not has_supported and not rows:raise ValueError('Public catalogue structure not supported or no active residential adverts')
@@ -231,15 +246,18 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
     if errors:result['reason']='; '.join(dict.fromkeys(errors))[:700]
     return list(rows.values()),result
 
-def collect_brussels(mode,criteria,only=None,workers=4):
-    sites=json.loads(REGISTRY.read_text()) if REGISTRY.exists() else []
+def collect_brussels(mode,criteria,only=None,workers=8):
+    sites=seed()
     blocked=restricted_agency_domains()
     if isinstance(only,list):
         sites=[s for s in sites if s['name'] in only]
     elif only=='all':
-        sites=[s for s in sites if s.get('enabled') or s.get('auditStatus')=='checked']
+        sites=[s for s in sites if s.get('website')]
     else:
-        sites=[s for s in sites if s.get('enabled')]
+        # A failed audit (for example DNS outage) must not permanently remove a
+        # requested agency from the scheduled sweep. Every attempt rechecks
+        # robots.txt before reading its public catalogue.
+        sites=[s for s in sites if s.get('website')]
     sites=[s for s in sites if normalized_domain(s['website']) not in blocked]
     out=[];results=[]
     with ThreadPoolExecutor(max_workers=workers) as pool:

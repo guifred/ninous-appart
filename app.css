@@ -568,6 +568,7 @@ button:focus-visible, a:focus-visible, summary:focus-visible, input:focus-visibl
 .map-listing-preview img,.map-preview-placeholder{display:grid;width:168px;height:100px;object-fit:cover;background:#edf0ea;color:#607469;font-size:27px;place-items:center}
 .map-listing-preview strong{display:block;padding:8px 10px 9px;color:#26392e;font:700 14px 'DM Sans',sans-serif}
 .pagination-progress{margin:14px 0 8px;text-align:center;color:#737c73;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums}
+.beach-distance{margin:10px 0 4px;padding:8px 10px;border-radius:9px;background:#edf5f4;color:#295a60;font-size:12px;font-weight:700;line-height:1.45}
 #moreBtn{display:block;margin:0 auto 22px}
 
 /* Familiar property-map price pins: clear at a glance, with a small lift on hover. */

@@ -102,6 +102,11 @@ def extract_energy_rating(value):
 def normalize_listing(row, mode, today=None, prior=None):
     today=today or datetime.now(TZ).date().isoformat(); prior=prior or {}
     row=dict(row); row['transaction']=mode
+    if mode=='coast':
+        from beach_distance import add_beach_distance
+        for key in ('latitude','longitude','beachDistanceM','beachWalkMinutes','beachDistanceBasis','beachProximityClaim','beachLocationBasis'):
+            if row.get(key) is None and prior.get(key) is not None:row[key]=prior[key]
+        add_beach_distance(row)
     parsed=urlparse(str(row.get('url') or ''))
     row['url']=str(row.get('url') or '') if parsed.scheme=='https' and parsed.netloc else ''
     row['id']=str(row.get('id') or (norm(row.get('source'))+'-'+re.sub(r'[^a-zA-Z0-9]+','-',str(row.get('url','')).rstrip('/').split('/')[-1]).lower()))

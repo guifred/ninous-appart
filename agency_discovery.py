@@ -16,9 +16,9 @@ from io import TextIOWrapper
 from html.parser import HTMLParser
 from urllib.robotparser import RobotFileParser
 from urllib.request import Request, urlopen
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urldefrag
-import csv, json, re, unicodedata
+import csv, json, re, unicodedata, subprocess, tempfile, os
 import html, ssl, time
 
 from branding import structured_brand
@@ -92,11 +92,34 @@ def _fetch(url):
     p=urlparse(url)
     if p.scheme!='https' or not p.hostname or p.username or p.password:raise ValueError('Only validated public HTTPS URLs are permitted.')
     req=Request(url,headers={'User-Agent':UA,'Accept':'text/html,application/xhtml+xml'})
-    with urlopen(req,timeout=15,context=SSL_CONTEXT) as response:
-        if response.status!=200:raise RuntimeError(f'HTTP {response.status}')
-        raw=response.read(4_000_001)
-        if len(raw)>4_000_000:raise RuntimeError('Response exceeds 4 MB limit')
-        return raw.decode('utf-8',errors='replace'),response.geturl()
+    try:
+        with urlopen(req,timeout=15,context=SSL_CONTEXT) as response:
+            if response.status!=200:raise RuntimeError(f'HTTP {response.status}')
+            raw=response.read(4_000_001)
+            if len(raw)>4_000_000:raise RuntimeError('Response exceeds 4 MB limit')
+            return raw.decode('utf-8',errors='replace'),response.geturl()
+    except (URLError,TimeoutError):
+        return _curl_get(url,4_000_000)
+
+def _curl_get(url,max_bytes):
+    """Use the system TLS client when Python DNS resolution is unavailable."""
+    fd,path=tempfile.mkstemp(prefix='ninou-agency-',suffix='.html')
+    os.close(fd)
+    try:
+        last_error=''
+        for attempt in range(2):
+            proc=subprocess.run(['/usr/bin/curl','-fLsS','--max-time','20','--max-redirs','5','-A',UA,'-o',path,'-w','%{url_effective}',url],capture_output=True,text=True,timeout=25)
+            if proc.returncode==0:
+                final=proc.stdout.strip()
+                if normalized_domain(final)!=normalized_domain(url):raise ValueError('Cross-domain redirect rejected')
+                raw=Path(path).read_bytes()
+                if len(raw)>max_bytes:raise RuntimeError('Response exceeds size limit')
+                return raw.decode('utf-8',errors='replace'),final
+            last_error=(proc.stderr or 'curl failed')[-200:]
+            if attempt==0:time.sleep(0.5)
+        raise RuntimeError(last_error)
+    finally:
+        Path(path).unlink(missing_ok=True)
 
 def _robots(url,cache):
     p=urlparse(url);origin=f'{p.scheme}://{p.netloc}'
@@ -110,6 +133,10 @@ def _robots(url,cache):
         except HTTPError as e:
             if e.code!=404:return False,f'robots-http-{e.code}'
             rp.parse([])
+        except (URLError,TimeoutError) as e:
+            try:
+                body,_=_curl_get(robots,500_000);rp.parse(body.splitlines())
+            except Exception as fallback:return False,'robots-unavailable: '+str(fallback)[:100]
         except Exception as e:return False,'robots-unavailable: '+str(e)[:100]
         cache[origin]=rp
     return cache[origin].can_fetch(UA,url),('allowed' if cache[origin].can_fetch(UA,url) else 'disallowed')
