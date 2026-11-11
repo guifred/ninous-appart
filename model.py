@@ -106,17 +106,18 @@ def extract_energy_rating(value):
 def normalize_listing(row, mode, today=None, prior=None):
     today=today or datetime.now(TZ).date().isoformat(); prior=prior or {}
     row=dict(row); row['transaction']=mode
-    if mode=='coast':
-        from beach_distance import add_beach_distance
-        for key in ('latitude','longitude','beachDistanceM','beachWalkMinutes','beachDistanceBasis','beachProximityClaim','beachLocationBasis'):
-            if row.get(key) is None and prior.get(key) is not None:row[key]=prior[key]
-        add_beach_distance(row)
     parsed=urlparse(str(row.get('url') or ''))
     row['url']=str(row.get('url') or '') if parsed.scheme=='https' and parsed.netloc else ''
     row['id']=str(row.get('id') or (norm(row.get('source'))+'-'+re.sub(r'[^a-zA-Z0-9]+','-',str(row.get('url','')).rstrip('/').split('/')[-1]).lower()))
+    old=prior.get(row['id'],{})
+    if mode=='coast':
+        from beach_distance import add_beach_distance
+        for key in ('latitude','longitude','beachDistanceM','beachWalkMinutes','beachDistanceBasis','beachProximityClaim','beachLocationBasis'):
+            if row.get(key) is None and old.get(key) is not None:row[key]=old[key]
+        add_beach_distance(row)
     row['price']=number_or_none(row.get('price')); row['fees']=number_or_none(row.get('fees')); row['area']=number_or_none(row.get('area')); row['bedrooms']=number_or_none(row.get('bedrooms'))
     current=row.get('photos') or []
-    previous=prior.get('photos') or []
+    previous=old.get('photos') or []
     row['photos']=valid_photos(([current] if isinstance(current,str) else list(current))+([previous] if isinstance(previous,str) else list(previous)),listing_url=row.get('url'))
     row['features']={**extract_features((row.get('title') or '')+' '+(row.get('summary') or '')),**(row.get('features') or {})}
     text=norm((row.get('title') or '')+' '+(row.get('summary') or '')+' '+(row.get('location') or ''))
@@ -124,7 +125,7 @@ def normalize_listing(row, mode, today=None, prior=None):
     row['construction']=row.get('construction') or ('new' if any(norm(t) in text for t in ('new build','new construction','neuf','nieuwbouw','nouvelle construction')) else 'existing' if any(norm(t) in text for t in ('existing property','existing building','bâtiment existant','batiment existant','bestaande woning')) else None)
     row['occupancy']=row.get('occupancy') or ('vacant' if any(norm(t) in text for t in ('vacant','libre à l acte','libre a l acte','vrij bij akte')) else 'occupied' if any(norm(t) in text for t in ('occupied','loué','loue','verhuurd','currently rented')) else None)
     energy_text=' '.join(str(row.get(k) or '') for k in ('energyRating','energyText','summary','title','location'))
-    row['energyRating']=extract_energy_rating(energy_text) or extract_energy_rating(prior.get(row['id'],{}).get('energyRating'))
+    row['energyRating']=extract_energy_rating(energy_text) or extract_energy_rating(old.get('energyRating'))
     brussels_places=('brussels','bruxelles','woluwe','ixelles','schaerbeek','etterbeek','evere','uccle','auderghem','anderlecht','forest','ganshoren','jette','koekelberg','molenbeek','saint gilles','saint josse','sint agatha','watermael','berchem sainte')
     flemish_places=('flanders','vlaanderen','antwerp','antwerpen','gent','ghent','leuven','brugge','bruge','hasselt','mechelen','malines','kortrijk','courtrai','aalst','alost','oostende','ostend','genk','sint niklaas','turnhout','roeselare','waregem','tienen','vilvoorde','dendermonde')
     walloon_places=('wallonia','wallonie','wallon','liège','liege','namur','charleroi','mons','tournai','verviers','arlon','wavre','la louvière','bastogne','marche en famenne','nivelles','dinant','soignies','gembloux')
@@ -135,11 +136,10 @@ def normalize_listing(row, mode, today=None, prior=None):
     if postal_number and 1000<=postal_number<=1299:region='PEB · Bruxelles'
     elif postal_number and (1500<=postal_number<=3999 or 8000<=postal_number<=9999):region='EPC · Flandre'
     elif postal_number and (1300<=postal_number<=1499 or 4000<=postal_number<=7999):region='PEB · Wallonie'
-    row['energyRegion']=(row.get('energyRegion') or prior.get(row['id'],{}).get('energyRegion') or region) if row['energyRating'] else None
+    row['energyRegion']=(row.get('energyRegion') or old.get('energyRegion') or region) if row['energyRating'] else None
     floor=re.search(r'\b(?:floor|étage|etage|verdieping)\s*[:#]?\s*(\d{1,2})\b',text,re.I)
     row['floor']=number_or_none(row.get('floor')) if row.get('floor') is not None else (int(floor.group(1)) if floor else None)
     pub=parse_publication_date(row.get('publicationDate'))
-    old=prior.get(row['id'],{})
     row['firstDiscovered']=old.get('firstDiscovered') or row.get('firstDiscovered') or today
     row['publicationDate']=pub['value'] or row['firstDiscovered']
     row['publicationDateOrigin']='source' if pub['value'] else 'firstDiscovered'

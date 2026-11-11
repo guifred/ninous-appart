@@ -775,7 +775,7 @@ def deduplicate_listings(found,mode,today,previous=None):
     """Conservative cross-source merge: exact URL or complete exact unit signature."""
     previous=previous or {};seen={}
     for raw in found:
-        row=normalize_listing(with_branding(raw),mode,today,previous.get(raw.get('id')))
+        row=normalize_listing(with_branding(raw),mode,today,previous)
         urlkey=('url',row.get('url','').split('#')[0].rstrip('/').lower())
         address=' '.join(str(row.get('streetAddress') or '').lower().split())
         postal=str(row.get('postalCode') or '').strip()

@@ -47,7 +47,7 @@ window.fetch=async function(input,options={}){
    return response({items:sorted.slice((page-1)*size,page*size),total:sorted.length,matches:matched.length,unknown:unknown.length,excluded:excluded.length,page,pageSize:size,hiddenStale:0,sourceCounts:Object.entries(counts).sort((a,b)=>b[1]-a[1]),suggestionItems:suggestions,gemItems:page===1&&section==='matches'?search.selectGems(all):[]});
   }
   if(path==='/api/photos'){const row=(await data(mode)).items.find(r=>String(r.id)===url.searchParams.get('id'));return response({photos:row?.photos||[],branding:row?{agencyName:row.agencyName,agencyLogo:row.agencyLogo}: {}})}
-  if(path==='/api/listing-validity'){const ids=new Set((url.searchParams.get('ids')||'').split(','));return response({validIds:(await data(mode)).items.filter(r=>!r.stale&&ids.has(String(r.id))).map(r=>String(r.id))})}
+  if(path==='/api/listing-validity'){const ids=new Set((url.searchParams.get('ids')||'').split(','));const [d,c,m]=await Promise.all([data(mode),prefs(mode),manifest]);overrides[mode]??=restore(key(mode,'overrides'),{});const items=d.items.filter(r=>!r.stale&&ids.has(String(r.id))).map(r=>search.evaluate(r,c,mode,m.config,overrides[mode][r.id]));return response({validIds:items.map(r=>String(r.id)),items})}
   if(path==='/api/override'&&method==='POST'){
    const payload=JSON.parse(options.body);overrides[mode]??=restore(key(mode,'overrides'),{});
    if(payload.clear)delete overrides[mode][payload.id];else{const low=search.number(payload.low),high=search.number(payload.high);if(low===null||high===null||low<0||high<low)throw new Error('Fourchette invalide');overrides[mode][payload.id]={low,high}}
