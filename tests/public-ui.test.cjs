@@ -4,6 +4,24 @@ const fs=require('node:fs');
 const vm=require('node:vm');
 
 const source=fs.readFileSync('app.js','utf8');
+const page=fs.readFileSync('index.html','utf8');
+
+test('Sorting control is in the quick search bar and remains unique',()=>{
+  const toolbar=page.slice(page.indexOf('<section class="search-toolbar"'),page.indexOf('</section>',page.indexOf('<section class="search-toolbar"')));
+  assert.match(toolbar,/<label class="sort-compact" for="resultsSort">/);
+  assert.match(toolbar,/<option value="price_asc">/);
+  assert.match(toolbar,/<option value="price_desc">/);
+  assert.match(toolbar,/<option value="published_desc">/);
+  assert.equal((page.match(/id="resultsSort"/g)||[]).length,1);
+});
+
+test('View tabs sit directly below quick filters and before recommendations',()=>{
+  const toolbarEnd=page.indexOf('</section>',page.indexOf('<section class="search-toolbar"'));
+  const tabs=page.indexOf('<div class="view-tabs"');
+  const gems=page.indexOf('<div class="recommendation-grid"');
+  assert.ok(toolbarEnd<tabs&&tabs<gems);
+  assert.equal((page.match(/class="view-tabs"/g)||[]).length,1);
+});
 const summary=source.slice(source.indexOf('function conciseSummary('),source.indexOf('function card(',source.indexOf('function conciseSummary(')));
 const energy=source.slice(source.indexOf('function energyLabel('),source.indexOf('function conciseSummary(',source.indexOf('function energyLabel(')));
 const type=source.slice(source.indexOf('function typeOf('),source.indexOf('function renovationMarkup(',source.indexOf('function typeOf(')));
