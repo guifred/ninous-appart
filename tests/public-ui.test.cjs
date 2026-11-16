@@ -33,8 +33,8 @@ vm.runInNewContext(type+energy+summary,context);
 
 test('Every card variant includes the same facts and French summary',()=>{
   const cardSource=source.slice(source.indexOf('function card('),source.indexOf('window.__listingRecords=',source.indexOf('function card(')));
-  const cardContext={...context,mode:'coast',typeOf:()=> 'Appartement',isFavorite:()=>false,money:n=>String(n),favoriteKey:()=> 'coast:1',agencyMarkup:()=>'',listingHighlights:()=>'<div class="listing-highlights">Atouts</div>',renovationMarkup:()=>'<div class="reno-simple">Travaux</div>',gemNotes:()=>'<div class="gem-notes">Pépite</div>',dateLabel:()=> 'Aujourd’hui'};
-  vm.runInNewContext(cardSource,cardContext);
+  const cardContext={...context,mode:'coast',typeOf:()=> 'Appartement',isFavorite:()=>false,money:n=>String(n),favoriteKey:(row,mode)=>mode+':'+row.id,agencyMarkup:()=>'',listingHighlights:()=>'<div class="listing-highlights">Atouts</div>',renovationMarkup:()=>'<div class="reno-simple">Travaux</div>',gemNotes:()=>'<div class="gem-notes">Pépite</div>',dateLabel:()=> 'Aujourd’hui'};
+  vm.runInNewContext('let featuredGemKeys=new Set(["coast:1"]);'+cardSource,cardContext);
   const row={id:'1',url:'https://agency.example/1',title:'Appartement',location:'8620 Nieuwpoort',price:200000,photos:[],summary:'Appartement rénové avec terrasse.',condition:'renovated',features:{terrace:true},energyRating:'C',energyRegion:'EPC · Flandre',beachDistanceM:300,beachDistanceBasis:'listing-text'};
   for(const variant of [cardContext.card(row),cardContext.card(row,true,'coast'),cardContext.card(row,false,'coast',true)]){
     assert.match(variant,/<b>Type<\/b>Appartement/);
@@ -46,6 +46,10 @@ test('Every card variant includes the same facts and French summary',()=>{
     assert.match(variant,/Plage : env\. 300 m/);
   }
   assert.match(cardContext.card(row,false,'coast',true),/gem-notes/);
+  assert.match(cardContext.card(row),/gem-list-badge[^>]*>✦ Pépite/);
+  assert.match(cardContext.card(row,true,'coast'),/gem-list-badge[^>]*>✦ Pépite/);
+  assert.doesNotMatch(cardContext.card(row,false,'coast',true),/gem-list-badge/);
+  assert.doesNotMatch(cardContext.card({...row,id:'2'}),/gem-list-badge/);
 });
 
 test('Map groups approximate postal positions without inventing a Brussels coordinate',()=>{
