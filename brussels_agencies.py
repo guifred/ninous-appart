@@ -208,7 +208,7 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
                 try:
                     page=read(url);result['details']+=1
                     from energy_detail import extract_detail_energy
-                    detail_rating=extract_detail_energy(page)
+                    detail_rating=extract_detail_energy(page,url)
                     detail_rows=structured_detail(page,url,mode,site)
                     if detail_rating:
                         for detail_row in detail_rows:detail_row['energyRating']=detail_rating
@@ -235,7 +235,7 @@ def collect_site(site,mode,criteria,*,cached=False,max_pages=45,max_details=30):
                     try:
                         page=read(url);result['details']+=1
                         from energy_detail import extract_detail_energy
-                        rating=extract_detail_energy(page)
+                        rating=extract_detail_energy(page,url)
                         if rating:row['energyRating']=rating
                         photos=parse_detail_photos(page,url)
                         if photos:row['photos']=valid_photos(photos)

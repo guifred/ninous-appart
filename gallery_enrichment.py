@@ -59,7 +59,7 @@ def enrich_galleries(modes=('coast', 'rent', 'sale'), limit=80):
             energy_missing=not row.get('energyRating')
             if checked and saved.get('photoVersion')==2:
                 if beach_missing and saved.get('beachVersion')==2 and now-checked<timedelta(days=1):continue
-                if energy_missing and not beach_missing and saved.get('energyVersion')==1 and now-checked<timedelta(days=7):continue
+                if energy_missing and not beach_missing and saved.get('energyVersion')==2 and now-checked<timedelta(days=7):continue
                 if not beach_missing and not energy_missing and now-checked<timedelta(days=14):continue
             try:
                 if not source_robots_ok(parsed.scheme+'://'+parsed.netloc,url):
@@ -75,7 +75,7 @@ def enrich_galleries(modes=('coast', 'rent', 'sale'), limit=80):
             merged=valid_photos(list(row.get('photos') or [])+photos,listing_url=url)
             if len(merged)>len(valid_photos(row.get('photos') or [],listing_url=url)):
                 row['photos']=merged;updated+=1
-            rating=extract_detail_energy(page)
+            rating=extract_detail_energy(page,url)
             if rating and rating!=row.get('energyRating'):
                 row['energyRating']=rating
                 if not row.get('energyRegion'):
@@ -90,7 +90,7 @@ def enrich_galleries(modes=('coast', 'rent', 'sale'), limit=80):
                 coordinates=extract_coordinates(page)
                 if coordinates:row['latitude'],row['longitude']=coordinates
                 add_beach_distance(row)
-            cache[key]={'checkedAt':now.isoformat(timespec='seconds'),'photoVersion':2,'beachVersion':2 if mode=='coast' else 0,'energyVersion':1,'photos':photos}
+            cache[key]={'checkedAt':now.isoformat(timespec='seconds'),'photoVersion':2,'beachVersion':2 if mode=='coast' else 0,'energyVersion':2,'photos':photos}
         if mode=='coast':enrich_coastal_locations(rows)
         atomic_json(DATA/mode/'listings.json',rows)
     if inspected: atomic_json(CACHE,cache)

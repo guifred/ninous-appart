@@ -9,7 +9,8 @@ from agency_parsers import parse_catalogue, pagination
 from beach_distance import add_beach_distance, extract_coordinates, extract_detail_address, extract_address_from_text, extract_address_from_url, enrich_coastal_locations
 from brussels_agencies import collect_brussels
 from gallery_enrichment import enrich_galleries
-from energy_detail import extract_detail_energy
+from energy_detail import extract_detail_energy, energy_badge_images, _ocr_rating, _ocr_text
+from agency_parsers import Tree
 
 class PublicExportTests(unittest.TestCase):
     def test_future_agency_ad_recovers_energielabel_from_original_page(self):
@@ -35,6 +36,38 @@ class PublicExportTests(unittest.TestCase):
         self.assertEqual(extract_detail_energy('<dl><dt>EPC label</dt><dd><svg><text>C</text></svg></dd></dl>'),'C')
         self.assertEqual(extract_detail_energy('<p>EPC: 286 (Label C).</p>'),'C')
         self.assertIsNone(extract_detail_energy('<p>EPC: 286 kWh/m².</p>'))
+
+    def test_epc_badge_with_opaque_image_name_uses_visual_reading(self):
+        page='<div><span>EPC label :</span><img src="/uploads/certificate-4821.png" alt="EPC"></div>'
+        with patch('energy_detail.read_energy_image',return_value='B') as read:
+            self.assertEqual(extract_detail_energy(page,'https://agency.example/property/1'),'B')
+        read.assert_called_once_with('https://agency.example/uploads/certificate-4821.png')
+        self.assertEqual(_ocr_rating('EPC\nB'),'B')
+        self.assertEqual(_ocr_rating('B'),'B')
+        self.assertEqual(energy_badge_images(Tree('<img src="/uploads/room.png" alt="Living room">').root,'https://agency.example/'),[])
+
+    def test_tesseract_output_is_used_when_available(self):
+        completed=type('Completed',(),{'returncode':0,'stdout':'EPC\nB'})()
+        with patch('energy_detail.shutil.which',return_value='/usr/bin/tesseract'),\
+             patch('energy_detail.subprocess.run',return_value=completed) as run:
+            self.assertEqual(_ocr_rating(_ocr_text('/tmp/epc.png')),'B')
+        self.assertEqual(run.call_args.args[0],['tesseract','/tmp/epc.png','stdout','--psm','6'])
+
+    def test_daily_enrichment_adds_epc_class_found_only_in_badge_image(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data=Path(tmp);write(data/'coast/status.json',{'state':'partial'})
+            write(data/'coast/listings.json',[{'id':'epc-image','url':'https://agency.example/flat/123',
+                'title':'Appartement','location':'8620 Nieuwpoort','postalCode':'8620','photos':[],
+                'beachDistanceM':250}])
+            page='<div><span>EPC label :</span><img src="/uploads/certificate-4821.png" alt="EPC"></div>'
+            with patch('gallery_enrichment.DATA',data),patch('gallery_enrichment.CACHE',data/'photo-cache.json'),\
+                 patch('gallery_enrichment.source_robots_ok',return_value=True),\
+                 patch('gallery_enrichment.fetch',return_value=page),\
+                 patch('energy_detail.read_energy_image',return_value='B'),\
+                 patch('gallery_enrichment.time.sleep'):
+                enrich_galleries(modes=('coast',),limit=1)
+            row=json.loads((data/'coast/listings.json').read_text())[0]
+            self.assertEqual((row['energyRating'],row['energyRegion']),('B','EPC · Flandre'))
 
     def test_future_coastal_agency_ad_gets_distance_on_daily_detail_retry(self):
         with tempfile.TemporaryDirectory() as tmp:

@@ -108,7 +108,7 @@ def collect_euroimmo(criteria,website,catalogue):
                            'streetAddress':address.rsplit(',',1)[0].strip() if ',' in address else None,
                            'price':price,'bedrooms':int(beds[1]) if beds else None,
                            'summary':description[:1200],'photos':valid_photos(gallery or ([urljoin(url,photo)] if photo else [])),
-                           'energyRating':extract_detail_energy(detail_html)}
+                           'energyRating':extract_detail_energy(detail_html,url)}
                 coordinates=extract_coordinates(detail_html)
                 if coordinates:
                     rows[url]['latitude'],rows[url]['longitude']=coordinates
@@ -174,7 +174,7 @@ def collect_padiva(criteria,website,catalogue):
                 rows.append({**brand(site,url),'transaction':'coast','title':title,'propertyType':ptype,
                              'location':location,'postalCode':city[1] if city else None,'streetAddress':address.split(location)[0].strip() if location else None,
                              'price':price,'area':amount(area[1]) if area else None,'bedrooms':int(beds[1]) if beds else None,
-                             'summary':description,'photos':photos,'energyRating':extract_detail_energy(detail)})
+                             'summary':description,'photos':photos,'energyRating':extract_detail_energy(detail,url)})
                 coordinates=extract_coordinates(detail)
                 if coordinates:
                     rows[-1]['latitude'],rows[-1]['longitude']=coordinates

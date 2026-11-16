@@ -56,6 +56,12 @@ jobs:
           node --test tests/public-search.test.cjs tests/public-api.test.cjs tests/public-ui.test.cjs
       - name: Restaurer les données partagées
         run: python3 scripts/bootstrap_cloud.py
+      - name: Préparer la lecture des labels EPC en image
+        if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.collect)
+        run: |
+          if ! command -v tesseract >/dev/null; then
+            (sudo apt-get update -qq && sudo apt-get install -y -qq tesseract-ocr) || echo '::warning::OCR indisponible ; la collecte continue avec les labels textuels.'
+          fi
       - name: Collecter les locations et les achats
         id: collection
         if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.collect)
