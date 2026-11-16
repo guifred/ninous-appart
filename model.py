@@ -84,9 +84,11 @@ def extract_features(text):
 def extract_energy_rating(value):
     """Read a Belgian EPC/PEB class from listing text or accessible image metadata."""
     text=str(value or '')
+    if re.search(r'\bepc\s+waarde\s+a(?:plus|\+)(?=\W|$)',text,re.I):return 'A+'
     patterns=(
         r'\b(?:epc|peb)\s*:\s*\d{1,4}(?:[,.]\d+)?\s*\(?\s*label\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:epc|peb)[-_ ]*(?:label|klasse|class|classe)[-_ :=/]*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
+        r'\bepc\s+waarde\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:epc|peb)(?:\s*[/&-]\s*(?:epc|peb))?\s*(?:(?:label|class|klasse|classe|rating|score)\s*)?[\s:=\-\[\]()]{0,10}([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:energy|energie)(?:[- _](?:label|class|klasse|rating|score))?\s*[:=\-\[]?\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
         r'\b(?:classe\s+(?:énergétique|energetique)|energy\s+(?:class|label|rating)|energieklasse|energielabel)\s*[:=\-]?\s*([a-g])(?=[^a-z]|$)(\s*\+{1,2})?',
@@ -125,7 +127,7 @@ def normalize_listing(row, mode, today=None, prior=None):
     row['construction']=row.get('construction') or ('new' if any(norm(t) in text for t in ('new build','new construction','neuf','nieuwbouw','nouvelle construction')) else 'existing' if any(norm(t) in text for t in ('existing property','existing building','bâtiment existant','batiment existant','bestaande woning')) else None)
     row['occupancy']=row.get('occupancy') or ('vacant' if any(norm(t) in text for t in ('vacant','libre à l acte','libre a l acte','vrij bij akte')) else 'occupied' if any(norm(t) in text for t in ('occupied','loué','loue','verhuurd','currently rented')) else None)
     energy_text=' '.join(str(row.get(k) or '') for k in ('energyRating','energyText','summary','title','location'))
-    row['energyRating']=extract_energy_rating(energy_text) or extract_energy_rating(old.get('energyRating'))
+    row['energyRating']=extract_energy_rating(row.get('energyRating')) or extract_energy_rating(energy_text) or extract_energy_rating(old.get('energyRating'))
     brussels_places=('brussels','bruxelles','woluwe','ixelles','schaerbeek','etterbeek','evere','uccle','auderghem','anderlecht','forest','ganshoren','jette','koekelberg','molenbeek','saint gilles','saint josse','sint agatha','watermael','berchem sainte')
     flemish_places=('flanders','vlaanderen','antwerp','antwerpen','gent','ghent','leuven','brugge','bruge','hasselt','mechelen','malines','kortrijk','courtrai','aalst','alost','oostende','ostend','genk','sint niklaas','turnhout','roeselare','waregem','tienen','vilvoorde','dendermonde')
     walloon_places=('wallonia','wallonie','wallon','liège','liege','namur','charleroi','mons','tournai','verviers','arlon','wavre','la louvière','bastogne','marche en famenne','nivelles','dinant','soignies','gembloux')
@@ -171,7 +173,7 @@ def valid_photos(values, listing_url=None):
         if parsed.hostname.startswith(('maptile.','epclabel.')):continue
         path=parsed.path
         if re.search(r'logo|icon|avatar|placeholder|sprite|flag|badge|favicon|blank|no[-_]?image|nopic|brand|immoscoop|ajax-loader|/pix\.gif|/team/|/epc[_/-]|/energy/|epclabel|maptile|facebook\.jpg|best_workplace|shutterstock|mod_languages|STYLE_|/images/(?:vendu|sold|close)\.png|\.svg$',path,re.I):continue
-        image_path=bool(re.search(r'\.(?:jpe?g|png|webp|gif)$',path,re.I) or re.search(r'/filestore/|/images/|/thumbnail-webp/|/gallery-like-image/|/Public/FileStore\.ashx|/proxy-image',path,re.I))
+        image_path=bool(re.search(r'\.(?:jpe?g|png|webp|gif)$',path,re.I) or re.search(r'/filestore/|/images/|/thumbnail-webp/|/gallery-like-image/|/Public/FileStore\.ashx|/proxy-image',path,re.I) or (parsed.hostname=='thumbs.zabun.be' and re.search(r'\.(?:jpe?g|png|webp)/Foobar$',path,re.I)))
         if not image_path:continue
         if parsed.hostname=='api-image.immovlan.be' and '/thumbnail-webp/' in parsed.path:
             u=re.sub(r'/thumbnail-webp/(?:Medium|Large|ExtraLarge)(?:\?h=\d+)?','/thumbnail-webp/ExtraLarge?h=900',u,flags=re.I)

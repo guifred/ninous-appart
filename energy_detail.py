@@ -84,6 +84,27 @@ def _ocr_rating(text):
     return letters[0] if len(set(letters))==1 and len(text)<80 else None
 
 
+def _flemish_residential_label_from_score(root):
+    """Read a displayed Flemish EPC label when its badge image has an opaque URL.
+
+    Flemish residential labels on certificates issued since 2019 use fixed
+    score bands. Only use the band when the page also advertises an EPC label;
+    a bare score can belong to an older certificate without an official label.
+    """
+    content=clean(root.text())
+    if not re.search(r'\bEPC\s*label\s*:',content,re.I):return None
+    match=re.search(r'\bEPC\s*:\s*(-?\d{1,4})\s*kWh\s*/\s*m\s*[²2]',content,re.I)
+    if not match:return None
+    score=int(match.group(1))
+    if score<=0:return 'A+'
+    if score<=100:return 'A'
+    if score<=200:return 'B'
+    if score<=300:return 'C'
+    if score<=400:return 'D'
+    if score<=500:return 'E'
+    return 'F'
+
+
 @lru_cache(maxsize=256)
 def read_energy_image(url):
     """OCR a small public EPC badge, only when its image URL allows crawling."""
@@ -141,4 +162,4 @@ def extract_detail_energy(page,page_url=None):
     for image_url in energy_badge_images(root,page_url):
         rating=read_energy_image(image_url)
         if rating:return rating
-    return None
+    return _flemish_residential_label_from_score(root)

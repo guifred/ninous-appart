@@ -11,8 +11,41 @@ from brussels_agencies import collect_brussels
 from gallery_enrichment import enrich_galleries
 from energy_detail import extract_detail_energy, energy_badge_images, _ocr_rating, _ocr_text
 from agency_parsers import Tree
+from model import normalize_listing
+from model import extract_energy_rating
+from coast_agencies import parse_beguin_detail, collect_beguin
 
 class PublicExportTests(unittest.TestCase):
+    def test_new_nieuwpoort_agencies_keep_photos_and_epc(self):
+        listing='https://immodekaai.be/nl/aanbod/4481438/appartement-te-koop-in-8620-nieuwpoort'
+        page=f'''<div class="estate-item"><a href="{listing}"><img src="https://thumbs.zabun.be/abc=/600x400/filters:image-format(pjpg)/3530/photo.jpg/Foobar"><img src="/img/energy/epc/a.svg" alt="epc waarde a"></a><a href="{listing}">Appartement te koop 1 slaapkamer(s) 8620 Nieuwpoort € 210.000</a></div>'''
+        site={'name':'Immo de Kaai','website':'https://immodekaai.be','coastal':True}
+        rows=parse_catalogue(page,'https://immodekaai.be/nl/te-koop','sale',site)
+        self.assertEqual(len(rows),1)
+        normalized=normalize_listing(rows[0],'coast')
+        self.assertEqual(normalized['energyRating'],'A')
+        self.assertEqual(len(normalized['photos']),1)
+        self.assertEqual(extract_energy_rating('alt="epc waarde aplus"'),'A+')
+        beguin='''<meta property="og:title" content="Appartement met 3 slpk"><meta property="og:image" content="https://example.be/flat.jpg"><input name="propertyAddress" value="Henegouwenstraat 10, 8620 NIEUWPOORT"><span>€ 285.000</span><div>Bewoonbare oppervlakte 55m² Aantal slaapkamers 3 EPC B</div>'''
+        row=parse_beguin_detail(beguin,'https://www.immobeguin.be/te-koop/8620-nieuwpoort/appartement/flat-76271','https://www.immobeguin.be')
+        self.assertEqual((row['price'],row['location'],row['energyRating']),(285000,'8620 Nieuwpoort','B'))
+
+    def test_beguin_daily_sitemap_limits_collection_to_selected_city(self):
+        home='https://www.immobeguin.be'
+        sitemap=home+'/sitemaps-1-section-properties-1-sitemap-p1.xml'
+        target=home+'/te-koop/8620-nieuwpoort/appartement/flat-76271'
+        other=home+'/te-koop/8400-oostende/appartement/flat-98765'
+        pages={home+'/sitemaps-1-sitemap.xml':f'<sitemapindex><sitemap><loc>{sitemap}</loc></sitemap></sitemapindex>',
+               sitemap:f'<urlset><url><loc>{target}</loc></url><url><loc>{other}</loc></url></urlset>',
+               target:'<meta property="og:title" content="Appartement"><input name="propertyAddress" value="Henegouwenstraat 10, 8620 NIEUWPOORT"><span>€ 285.000</span><p>EPC B</p>'}
+        with patch('coast_agencies._robots',return_value=(True,'')),\
+             patch('coast_agencies._fetch',side_effect=lambda url:(pages[url],{})) as fetch,\
+             patch('coast_agencies.time.sleep'):
+            rows,status=collect_beguin({'areas':'Nieuwpoort','property':'Apartment or house'},home)
+        self.assertTrue(status['ok'])
+        self.assertEqual((len(rows),rows[0]['energyRating']),(1,'B'))
+        self.assertNotIn(other,[call.args[0] for call in fetch.call_args_list])
+
     def test_future_agency_ad_recovers_energielabel_from_original_page(self):
         with tempfile.TemporaryDirectory() as tmp:
             data=Path(tmp);write(data/'sale/status.json',{'state':'partial'})
@@ -36,6 +69,15 @@ class PublicExportTests(unittest.TestCase):
         self.assertEqual(extract_detail_energy('<dl><dt>EPC label</dt><dd><svg><text>C</text></svg></dd></dl>'),'C')
         self.assertEqual(extract_detail_energy('<p>EPC: 286 (Label C).</p>'),'C')
         self.assertIsNone(extract_detail_energy('<p>EPC: 286 kWh/m².</p>'))
+        # Immo Group-S publishes the class as an opaque Omnicasa badge image.
+        group_s='''<div class="caption">Energie certificaat</div><div class="content">
+          <div class="field">EPC No.20210412-0002400295-RES-1</div>
+          <div class="field"><div class="name">E-peil</div><div class="value">0</div></div>
+          <div class="field"><div class="name">EPC</div><div class="sep">:</div><div class="value">188 kWh/m&sup2;.jaar</div></div>
+          <div class="field"><div class="name">EPC label</div><div class="sep">:</div><div class="value"><img src="https://epclabel.omnicasa.com/images/EPClabel/peb_10003.png" title="EPClabel"></div></div>
+          </div>'''
+        self.assertEqual(extract_detail_energy(group_s),'B')
+        self.assertIsNone(extract_detail_energy('<div>EPC : 188 kWh/m².jaar</div>'))
 
     def test_epc_badge_with_opaque_image_name_uses_visual_reading(self):
         page='<div><span>EPC label :</span><img src="/uploads/certificate-4821.png" alt="EPC"></div>'

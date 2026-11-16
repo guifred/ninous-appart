@@ -56,6 +56,7 @@ def parse_catalogue(page,page_url,mode,site):
         if node.tag=='a' and node.attrs.get('href'):links.insert(0,node.attrs['href'])
         href=next((u for u in links if any(w in u.lower() for w in detail_route)),None)
         if not href:continue
+        if mode!='rent' and re.search(r'optie[-_ ]koop|in[-_ ]optie',href,re.I):continue
         if mode!='rent' and (re.search(r'handelsruimte|handelspand|bedrijfsvastgoed|/kantoor/|/horeca/|bouwgrond',href,re.I) or re.search(r'/(?:garage|parking|staanplaats)(?:/|-)',href,re.I)):continue
         url=urljoin(page_url,href)
         if urlsplit(url).hostname!=urlsplit(page_url).hostname:continue
@@ -120,7 +121,8 @@ def parse_catalogue(page,page_url,mode,site):
             m=re.search(r'(\d+)\s*(?:chambres?|ch\.|slaapkamers?|bedrooms?)',body,re.I);beds=int(m[1]) if m else (0 if 'studio' in body.lower() else None)
         title=next((n.text() for n in nodes if n.tag in ('h2','h3','h4')),None) or next((html.unescape(n.attrs.get('alt','')).split(' - ')[0] for n in images if kind(n.attrs.get('alt',''))),None) or ('Appartement' if ptype=='Apartment' else 'Maison')
         energy=' '.join(' '.join(str(v) for v in n.attrs.values()) for n in nodes if re.search(r'peb|epc|energielabel|energieklasse|energy.class',str(n.attrs),re.I))
-        rows[url]={**brand(site,url),'transaction':mode,'title':title,'propertyType':ptype,'location':((postal_code+' ') if postal_code and postal_code not in city else '')+city,'postalCode':postal_code,'price':price,'area':amount(area_match[1]) if area_match else None,'bedrooms':beds,'bathrooms':baths,'fees':None,'summary':body[:700],'photos':valid_photos(photos),'energyText':energy+' '+body[:1800],'publicationDate':None}
+        row={**brand(site,url),'transaction':mode,'title':title,'propertyType':ptype,'location':((postal_code+' ') if postal_code and postal_code not in city else '')+city,'postalCode':postal_code,'price':price,'area':amount(area_match[1]) if area_match else None,'bedrooms':beds,'bathrooms':baths,'fees':None,'summary':body[:700],'photos':valid_photos(photos),'energyText':energy+' '+body[:1800],'publicationDate':None}
+        if url not in rows or len(row['photos'])>len(rows[url]['photos']):rows[url]=row
     return list(rows.values())
 
 def structured_detail(page,url,mode,site):
