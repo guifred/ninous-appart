@@ -48,8 +48,11 @@ test('Every card variant includes the same facts and French summary',()=>{
   assert.match(cardContext.card(row,false,'coast',true),/gem-notes/);
   assert.match(cardContext.card(row),/gem-list-badge[^>]*>✦ Pépite/);
   assert.match(cardContext.card(row,true,'coast'),/gem-list-badge[^>]*>✦ Pépite/);
+  assert.match(cardContext.card(row),/gem-photo-star[^>]*>★/);
+  assert.match(cardContext.card(row,false,'coast',true),/gem-photo-star[^>]*>★/);
   assert.doesNotMatch(cardContext.card(row,false,'coast',true),/gem-list-badge/);
   assert.doesNotMatch(cardContext.card({...row,id:'2'}),/gem-list-badge/);
+  assert.doesNotMatch(cardContext.card({...row,id:'2'}),/gem-photo-star/);
 });
 
 test('Map groups approximate postal positions without inventing a Brussels coordinate',()=>{
